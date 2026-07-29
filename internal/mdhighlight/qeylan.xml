@@ -1,0 +1,112 @@
+<lexer>
+  <config>
+    <name>Qeylan</name>
+    <alias>qeylan</alias>
+    <alias>qy</alias>
+    <filename>*.qy</filename>
+    <mime_type>text/x-qeylan</mime_type>
+  </config>
+  <rules>
+    <state name="double-quoted-string">
+      <rule pattern="\\.">
+        <token type="LiteralStringEscape"/>
+      </rule>
+      <rule pattern="&#34;">
+        <token type="LiteralStringDouble"/>
+        <pop depth="1"/>
+      </rule>
+      <rule pattern="[^\\&#34;]+">
+        <token type="LiteralStringDouble"/>
+      </rule>
+      <rule pattern="\\">
+        <token type="LiteralStringDouble"/>
+      </rule>
+    </state>
+    <state name="root">
+      <rule pattern="//[^\n]*">
+        <token type="CommentSingle"/>
+      </rule>
+      <rule pattern="[?!]+">
+        <token type="Operator"/>
+      </rule>
+      <rule pattern="#[A-Za-z0-9_]+\b">
+        <token type="NameTag"/>
+      </rule>
+      <rule pattern="@[A-Za-z0-9_]+\b">
+        <token type="NameDecorator"/>
+      </rule>
+      <rule pattern="\b[-+]?[0-9]+(?:\.[0-9]+)?(?:years|year|quarters|quarter|semesters|semester|months|month|weeks|week|days|day|hours|hour|minutes|minute|min|seconds|second|sec|milsec|ms|nanosec|ns|usec|us|y|m|q|w|d|s|h|tb|pb|gb|kb|r|K|M|B|G|%)\b">
+        <token type="LiteralNumber"/>
+      </rule>
+      <rule pattern="(?:\.\.\.|%of|%to|%from|%\+|%-|\.\.|-&gt;|&lt;-)">
+        <token type="Operator"/>
+      </rule>
+      <rule pattern="\b(?:mod|div|and|or|not|xor|band|bor|bnot)\b">
+        <token type="OperatorWord"/>
+      </rule>
+      <rule pattern="\b(ymd|ydm|mdy|myd|dmy|dym|ym|yd|my|md|dy|dm|tz|dz|d|t)(&#34;)">
+        <bygroups>
+          <token type="LiteralStringAffix"/>
+          <token type="LiteralStringDouble"/>
+        </bygroups>
+        <push state="double-quoted-string"/>
+      </rule>
+      <rule pattern="&#34;">
+        <token type="LiteralStringDouble"/>
+        <push state="double-quoted-string"/>
+      </rule>
+      <rule pattern="\b(?:delete|update)\s+many\b">
+        <token type="Keyword"/>
+      </rule>
+      <rule pattern="\b(?:delete|update|insert|upsert|merge|create)\b">
+        <token type="Keyword"/>
+      </rule>
+      <rule pattern="\b(?:let|var|set|context|get|table|ref|aref|reverse|inverse|many|multitype|type|tag|extend|as|can|interface|alias|struct|any|include|object|trait|embed)\b">
+        <token type="KeywordDeclaration"/>
+      </rule>
+      <rule pattern="\b(?:use|module)\b">
+        <token type="KeywordNamespace"/>
+      </rule>
+      <rule pattern="\b(?:if|else|elsif|for|while|case|of|return|do|with|try|bail|pass|defer|ignore|then)\b">
+        <token type="Keyword"/>
+      </rule>
+      <rule pattern="\b(?:in|from|get|when|query|on|by|sort|match|reshape|limit|top|bottom|inc|dec|all|yield|join|union|intersec|diff|cross|zip|nest|unnest|stream|emit|over|to|global|many|pass)\b">
+        <token type="Keyword"/>
+      </rule>
+      <rule pattern="\b(?:expand|inline|macro|define|auto)\b">
+        <token type="KeywordPseudo"/>
+      </rule>
+      <rule pattern="([A-Za-z_][A-Za-z0-9_]*)(\s*)(\()">
+        <bygroups>
+          <token type="NameFunction"/>
+          <token type="TextWhitespace"/>
+          <token type="Punctuation"/>
+        </bygroups>
+      </rule>
+      <rule pattern="\$(?:[A-Za-z0-9_]*|self|rows|cols|row|Self|SubTypes)\b">
+        <token type="NameBuiltin"/>
+      </rule>
+      <rule pattern="\b[A-Z][A-Za-z0-9_]*\b">
+        <token type="NameClass"/>
+      </rule>
+      <rule pattern="\b-?[0-9][0-9._]*\b">
+        <token type="LiteralNumber"/>
+      </rule>
+      <rule pattern="[()\[\]{},.:;]">
+        <token type="Punctuation"/>
+      </rule>
+      <rule pattern="[+\-*/%=&amp;|&lt;&gt;^~]+">
+        <token type="Operator"/>
+      </rule>
+      <rule pattern="[A-Za-z_][A-Za-z0-9_]*">
+        <token type="Name"/>
+      </rule>
+      <rule pattern="\s+">
+        <token type="TextWhitespace"/>
+      </rule>
+      <rule pattern=".">
+        <token type="Text"/>
+      </rule>
+    </state>
+  </rules>
+</lexer>
