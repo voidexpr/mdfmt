@@ -4,6 +4,7 @@
     <alias>qeylan</alias>
     <alias>qy</alias>
     <filename>*.qy</filename>
+    <filename>*.qeylan</filename>
     <mime_type>text/x-qeylan</mime_type>
   </config>
   <rules>

@@ -15,6 +15,11 @@ func TestQeylanLexerRegistrationAndTokens(t *testing.T) {
 			t.Fatalf("lexer %q = %#v, want Qeylan", alias, lexer)
 		}
 	}
+	for _, filename := range []string{"example.qy", "example.qeylan"} {
+		if lexer := lexers.Match(filename); lexer == nil || lexer.Config().Name != "Qeylan" {
+			t.Fatalf("lexer for %q = %#v, want Qeylan", filename, lexer)
+		}
+	}
 
 	source := "let value = 12days\nif ready? call(Type, $rows, @macro, #tag)\n\"escaped\\\"quote\" // note\n"
 	iterator, err := lexers.Get("qeylan").Tokenise(nil, source)

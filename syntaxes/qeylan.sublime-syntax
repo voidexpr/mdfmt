@@ -1,0 +1,251 @@
+%YAML 1.2
+---
+# See http://www.sublimetext.com/docs/syntax.html
+# see: https://github.com/sublimehq/Packages/blob/bf13543d9f06c625039c92d7b986f32aba380adf/C%2B%2B/C.sublime-syntax
+# https://github.com/ziglang/sublime-zig-language/blob/master/Syntaxes/Zig.sublime-syntax
+# https://github.com/sublimehq/Packages/blob/master/Python/Python.sublime-syntax
+
+# Note: need the tmPreferences file for comment/uncomment keyboard shortcut to work, don't delete it !
+
+name: qeylan
+version: 2
+file_extensions:
+  - qy
+  - qeylan
+scope: source.qy
+contexts:
+  main:
+    # TODO: fieldname:  should be colored, especially outside of variable/function parameters, i.e. in get/set
+    # TODO: red for ? and ! ?
+
+    # Null and Error
+    - match: '[\?\!]+'
+      scope: keyword.operator.arithmetic.qy
+
+    # tag
+    - match: '([#][a-zA-Z0-9_]*)\b'
+      # scope: variable.punctuation.qy
+      scope: constant.numeric.qy
+
+    # macro
+    - match: '([@][a-zA-Z0-9_]*)\b'
+      # scope: variable.punctuation.qy
+      # scope: constant.numeric.qy
+      # scope: constant.other.placeholder.qy
+      scope: variable.language.qy
+
+    # Quantified values
+    - match: '\b[\-\+]?[0-9]+(.[0-9]+)?(years|year|quarters|quarter|semesters|semester|months|month|weeks|week|days|day|hours|hour|minutes|minute|min|seconds|second|sec|milsec|ms|nanosec|ns|usec|us|y|m|q|w|d|s|h|tb|pb|gb|kb|r|K|M|B|G|%)\b'
+      scope: constant.numeric.qy
+
+    # Operators
+    - match: '(\.\.\.|%of|%to|%from|%\+|%\-|\.\.|\-\>|\<\-)'
+      #scope: keyword.operator.logical.qy
+      scope: keyword.operator.arithmetic.qy
+
+    # numerical word operators
+    - match: '\b(mod|div)\b'
+      #scope: keyword.operator.logical.qy
+      scope: keyword.operator.arithmetic.qy
+
+    # Word operators
+    - match: '\b(and|or|not|xor|band|bor|bnot)\b'
+      #scope: keyword.operator.logical.qy
+      scope: keyword.operator.logical.qy
+
+    # Time and date literals
+    - match: '(ymd|ydm|mdy|myd|dmy|dym|ym|yd|my|md|dy|dm|tz|dz|d|t)"'
+      # scope: punctuation.definition.string.begin.qy
+      scope: keyword.operator.arithmetic.qy
+      push: double_quoted_string
+
+    # Strings begin and end with quotes, and use backslashes as an escape
+    # character
+    - match: '"'
+      scope: punctuation.definition.string.begin.qy
+      push: double_quoted_string
+
+    - match: "'"
+      scope: punctuation.definition.string.begin.qy
+      push: single_quoted_string
+
+    # TODO: """
+
+    # Comments begin with a '//' and finish at the end of the line
+    - match: '//'
+      scope: punctuation.definition.comment.qy
+      push: line_comment
+
+    # Modifications
+    - match: '\b(delete|update)\s+many\b'
+      scope: keyword.control.qy
+
+    - match: '\b(delete|update|insert|upsert|merge|create)\b'
+      scope: keyword.control.qy
+
+    # declaration
+    - match: '\b(let|var|set|context|get|table|ref|aref|reverse|inverse|many|multitype|type|tag|extend|as|can|interface|alias|struct|any|include|object|trait|embed)\b'
+      scope: keyword.control.qy
+
+    # module
+    - match: '\b(use|module)\b'
+      scope: keyword.control.qy
+
+    # control flow
+    - match: '\b(if|else|elsif|for|while|case|of|return|do|with|try|bail|pass|defer|ignore|then)\b'
+      scope: keyword.control.qy
+
+    # operator
+    - match: '\b(in|not|and|or)\b'
+      scope: keyword.control.qy
+
+    # query
+    - match: '\b(from|get|when|query|on|by|sort|match|reshape|limit|top|bottom|inc|dec|all|yield)\b'
+      scope: keyword.control.qy
+
+    # table operators
+    - match: '\b(join|union|intersec|diff|cross|zip|nest|unnest)\b'
+      scope: keyword.control.qy
+
+    # streaming query
+    - match: '\b(stream|on|emit|over|to)\b'
+      scope: keyword.control.qy
+
+    # Experimental
+    - match: '\b(global|many|pass)\b'
+      scope: keyword.control.qy
+
+    # # Keywords are if, else for and while.
+    # # Note that blackslashes don't need to be escaped within single quoted
+    # # strings in YAML. When using single quoted strings, only single quotes
+    # # need to be escaped: this is done by using two single quotes next to each
+    # # other.
+    # - match: '\b(if|else|for|while|from|get|return|when|of|on|case|by|sort|match|do|with|do|table|type|nest|unnest|query|try|insert|delete|update|upsert|let|var|set|get|ref|reverse|in|not|and|or|tag|on|stream|over|on|for|reshape|create|context|use|module|extend|limit|top|bottom|inc|dec|emit|to|all|as|context|define|global|many|pass)\b'
+    #   scope: keyword.control.qy
+
+    # compile time keywords
+    - match: '\b(expand|inline|macro|define|auto)\b'
+      scope: constant.other.placeholder.qy
+
+    - match: (?=\b[[:alpha:]_][[:alnum:]_]*\b\()
+      push: function-call
+
+    # built-in namespace
+    - match: '(\$|\@)([a-zA-Z0-9_]*|self|rows|cols|row|Self|SubTypes)\b'
+      scope: variable.language.qy
+      #scope: constant.numeric.qy
+      #scope: constant.language.qy
+
+    # Types
+    - match: '\b([A-Z][a-zA-Z0-9_]*)\b'
+      scope: variable.parameter.qy
+
+    # Numbers
+    - match: '\b(-)?[0-9._]+\b'
+      scope: constant.numeric.qy
+
+    # TODO: push a scope for get and set then any field defined inside is colored
+    #       also for from and on to table aliases are easy to read
+    # # Function parameters, field names
+    # - match: '\b([_a-z][A-Za-z0-9_]*\:)\b'
+    #   scope: constant.numeric.qy
+
+
+  function-call:
+    - match: \b[[:alpha:]_][[:alnum:]_]*\b
+      scope: variable.function.qy
+    - match: \(
+      pop: 1
+
+  single_quoted_string:
+    - meta_scope: string.quoted.single.qy
+    - match: '\\.'
+      scope: constant.character.escape.qy
+    - match: "'"
+      scope: punctuation.definition.string.end.qy
+      pop: true
+    - match: $
+      pop: true
+
+  double_quoted_string:
+    - meta_scope: string.quoted.double.qy
+    - match: '\\.'
+      scope: constant.character.escape.qy
+    - match: '@\{'
+      scope: punctuation.section.interpolation.begin.qy
+      push: interpolation_braces
+    - match: '^([ \t]*)(@)(?=(?:if|for|from|else|case|of)\b)'
+      captures:
+        2: punctuation.section.interpolation.begin.qy
+      push: interpolation_line
+    - match: '^([ \t]*)(@)([[:alpha:]_][[:alnum:]_]*)([ \t]*)(\()'
+      captures:
+        2: punctuation.section.interpolation.begin.qy
+        3: variable.function.qy
+        5: punctuation.section.group.begin.qy
+      push: interpolation_parens
+    - match: '"'
+      scope: punctuation.definition.string.end.qy
+      pop: true
+
+  interpolation_line:
+    - clear_scopes: 1
+    - meta_scope: source.qy.embedded meta.interpolation.qy
+    - match: $
+      pop: true
+    - include: main
+
+  interpolation_braces:
+    - clear_scopes: 1
+    - meta_scope: source.qy.embedded meta.interpolation.qy
+    - match: '\{'
+      scope: punctuation.section.block.begin.qy
+      push: interpolation_braces_nested
+    - match: '\}'
+      scope: punctuation.section.interpolation.end.qy
+      pop: true
+    - include: main
+
+  interpolation_braces_nested:
+    - match: '\{'
+      scope: punctuation.section.block.begin.qy
+      push: interpolation_braces_nested
+    - match: '\}'
+      scope: punctuation.section.block.end.qy
+      pop: true
+    - include: main
+
+  interpolation_parens:
+    - clear_scopes: 1
+    - meta_scope: source.qy.embedded meta.interpolation.qy
+    - match: '\b([[:alpha:]_][[:alnum:]_]*)([ \t]*)(\()'
+      captures:
+        1: variable.function.qy
+        3: punctuation.section.group.begin.qy
+      push: interpolation_nested
+    - match: '[\(\[\{]'
+      scope: punctuation.section.group.begin.qy
+      push: interpolation_nested
+    - match: '\)'
+      scope: punctuation.section.group.end.qy
+      pop: true
+    - include: main
+
+  interpolation_nested:
+    - match: '\b([[:alpha:]_][[:alnum:]_]*)([ \t]*)(\()'
+      captures:
+        1: variable.function.qy
+        3: punctuation.section.group.begin.qy
+      push: interpolation_nested
+    - match: '[\(\[\{]'
+      scope: punctuation.section.group.begin.qy
+      push: interpolation_nested
+    - match: '[\)\]\}]'
+      scope: punctuation.section.group.end.qy
+      pop: true
+    - include: main
+
+  line_comment:
+    - meta_scope: comment.line.qy
+    - match: $
+      pop: true

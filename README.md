@@ -114,6 +114,11 @@ built-in language set, plus the project-specific `qeylan` and `qy` labels.
 Unknown and unlabeled fences remain escaped plain text. `serve` delivers one
 shared light/dark syntax stylesheet; `save` embeds the same stylesheet.
 
+The Qeylan definitions use `.qy` as the primary filename extension and
+`qeylan` as the primary Markdown fence label. The `.qeylan` filename extension
+and `qy` fence label are also recognized. Matching Sublime Text definitions are
+available under `syntaxes/`.
+
 After changing the highlighter or its styles, regenerate and verify the checked
 in CSS:
 
