@@ -7,7 +7,43 @@
     <mime_type>text/x-qeylan</mime_type>
   </config>
   <rules>
+    <state name="single-quoted-string">
+      <rule pattern="\\.">
+        <token type="LiteralStringEscape"/>
+      </rule>
+      <rule pattern="&#39;">
+        <token type="LiteralStringSingle"/>
+        <pop depth="1"/>
+      </rule>
+      <rule pattern="[^\\&#39;\r\n]+">
+        <token type="LiteralStringSingle"/>
+      </rule>
+      <rule pattern="\\">
+        <token type="LiteralStringSingle"/>
+      </rule>
+    </state>
     <state name="double-quoted-string">
+      <rule pattern="@\{">
+        <token type="LiteralStringInterpol"/>
+        <push state="interpolation-braces"/>
+      </rule>
+      <rule pattern="^([ \t]*)(@)((?:if|for|from|else|case|of)\b[^\r\n]*)">
+        <bygroups>
+          <token type="LiteralStringDouble"/>
+          <token type="LiteralStringInterpol"/>
+          <usingself state="root"/>
+        </bygroups>
+      </rule>
+      <rule pattern="^([ \t]*)(@)([A-Za-z_][A-Za-z0-9_]*)([ \t]*)(\()">
+        <bygroups>
+          <token type="LiteralStringDouble"/>
+          <token type="LiteralStringInterpol"/>
+          <token type="NameFunction"/>
+          <token type="TextWhitespace"/>
+          <token type="Punctuation"/>
+        </bygroups>
+        <push state="interpolation-parens"/>
+      </rule>
       <rule pattern="\\.">
         <token type="LiteralStringEscape"/>
       </rule>
@@ -15,11 +51,85 @@
         <token type="LiteralStringDouble"/>
         <pop depth="1"/>
       </rule>
-      <rule pattern="[^\\&#34;]+">
+      <rule pattern="\r?\n">
+        <token type="LiteralStringDouble"/>
+      </rule>
+      <rule pattern="[^\\&#34;@\r\n]+">
+        <token type="LiteralStringDouble"/>
+      </rule>
+      <rule pattern="@">
         <token type="LiteralStringDouble"/>
       </rule>
       <rule pattern="\\">
         <token type="LiteralStringDouble"/>
+      </rule>
+    </state>
+    <state name="interpolation-braces">
+      <rule pattern="\{">
+        <token type="Punctuation"/>
+        <push state="interpolation-braces-nested"/>
+      </rule>
+      <rule pattern="\}">
+        <token type="LiteralStringInterpol"/>
+        <pop depth="1"/>
+      </rule>
+      <rule>
+        <include state="root"/>
+      </rule>
+    </state>
+    <state name="interpolation-braces-nested">
+      <rule pattern="\{">
+        <token type="Punctuation"/>
+        <push state="interpolation-braces-nested"/>
+      </rule>
+      <rule pattern="\}">
+        <token type="Punctuation"/>
+        <pop depth="1"/>
+      </rule>
+      <rule>
+        <include state="root"/>
+      </rule>
+    </state>
+    <state name="interpolation-parens">
+      <rule pattern="([A-Za-z_][A-Za-z0-9_]*)(\s*)(\()">
+        <bygroups>
+          <token type="NameFunction"/>
+          <token type="TextWhitespace"/>
+          <token type="Punctuation"/>
+        </bygroups>
+        <push state="interpolation-nested"/>
+      </rule>
+      <rule pattern="[\(\[\{]">
+        <token type="Punctuation"/>
+        <push state="interpolation-nested"/>
+      </rule>
+      <rule pattern="\)">
+        <token type="Punctuation"/>
+        <pop depth="1"/>
+      </rule>
+      <rule>
+        <include state="root"/>
+      </rule>
+    </state>
+    <state name="interpolation-nested">
+      <rule pattern="([A-Za-z_][A-Za-z0-9_]*)(\s*)(\()">
+        <bygroups>
+          <token type="NameFunction"/>
+          <token type="TextWhitespace"/>
+          <token type="Punctuation"/>
+        </bygroups>
+        <push state="interpolation-nested"/>
+      </rule>
+      <rule pattern="[\(\[\{]">
+        <token type="Punctuation"/>
+        <push state="interpolation-nested"/>
+      </rule>
+      <rule pattern="[\)\]\}]">
+        <token type="Punctuation"/>
+        <pop depth="1"/>
+      </rule>
+      <rule>
+        <include state="root"/>
       </rule>
     </state>
     <state name="root">
@@ -54,6 +164,10 @@
       <rule pattern="&#34;">
         <token type="LiteralStringDouble"/>
         <push state="double-quoted-string"/>
+      </rule>
+      <rule pattern="&#39;">
+        <token type="LiteralStringSingle"/>
+        <push state="single-quoted-string"/>
       </rule>
       <rule pattern="\b(?:delete|update)\s+many\b">
         <token type="Keyword"/>

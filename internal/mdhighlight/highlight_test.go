@@ -44,6 +44,100 @@ func TestQeylanLexerRegistrationAndTokens(t *testing.T) {
 	}
 }
 
+func TestQeylanStringInterpolation(t *testing.T) {
+	_ = Extension()
+
+	tests := []struct {
+		name   string
+		source string
+		wants  []struct {
+			value string
+			kind  chroma.TokenType
+		}
+		forbids []struct {
+			value string
+			kind  chroma.TokenType
+		}
+	}{
+		{
+			name:   "single quoted strings do not interpolate",
+			source: "'plain @{ let bad = call() } @if no'\n",
+			wants: []struct {
+				value string
+				kind  chroma.TokenType
+			}{
+				{"plain @{ let bad = call() } @if no", chroma.LiteralStringSingle},
+			},
+			forbids: []struct {
+				value string
+				kind  chroma.TokenType
+			}{
+				{"@{", chroma.LiteralStringInterpol},
+				{"let", chroma.KeywordDeclaration},
+				{"call", chroma.NameFunction},
+			},
+		},
+		{
+			name: "double quoted strings interpolate Qeylan",
+			source: `"before
+@{ let total = outer({value: call(12days)})
+}
+  @if ready? call(Type)
+  @render(call(Type))
+after @if stays text
+"
+`,
+			wants: []struct {
+				value string
+				kind  chroma.TokenType
+			}{
+				{"@{", chroma.LiteralStringInterpol},
+				{"let", chroma.KeywordDeclaration},
+				{"outer", chroma.NameFunction},
+				{"value", chroma.Name},
+				{"call", chroma.NameFunction},
+				{"12days", chroma.LiteralNumber},
+				{"}", chroma.LiteralStringInterpol},
+				{"@", chroma.LiteralStringInterpol},
+				{"if", chroma.Keyword},
+				{"render", chroma.NameFunction},
+				{"Type", chroma.NameClass},
+				{"after ", chroma.LiteralStringDouble},
+				{"@", chroma.LiteralStringDouble},
+				{"if stays text", chroma.LiteralStringDouble},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			iterator, err := lexers.Get("qeylan").Tokenise(nil, test.source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tokens := iterator.Tokens()
+			if got := chroma.Stringify(tokens...); got != test.source {
+				t.Fatalf("token text = %q, want %q", got, test.source)
+			}
+			for _, token := range tokens {
+				if token.Type == chroma.Error {
+					t.Fatalf("unexpected error token %q:\n%#v", token.Value, tokens)
+				}
+			}
+			for _, want := range test.wants {
+				if !containsToken(tokens, want.value, want.kind) {
+					t.Errorf("Qeylan tokens do not contain %q as %s:\n%#v", want.value, want.kind, tokens)
+				}
+			}
+			for _, forbid := range test.forbids {
+				if containsToken(tokens, forbid.value, forbid.kind) {
+					t.Errorf("Qeylan tokens unexpectedly contain %q as %s:\n%#v", forbid.value, forbid.kind, tokens)
+				}
+			}
+		})
+	}
+}
+
 func containsToken(tokens []chroma.Token, value string, kind chroma.TokenType) bool {
 	for _, token := range tokens {
 		if token.Value == value && token.Type == kind {
