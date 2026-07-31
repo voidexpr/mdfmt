@@ -5,6 +5,16 @@ self-contained HTML file. It is a single Go binary with embedded templates,
 styles, JavaScript, and syntax-highlighting definitions, so it works offline
 without adjacent runtime assets.
 
+## Features
+
+### serve
+* great navigation
+  * left side: file list
+  * center: top breadcrumb and content
+  * right side: table of content
+* optional: edit button to open the file seen from a graphical text editor
+  * then write an editor plugin to call 'mdfmt open' to be able to move between the web browser view and your editor
+
 ## Install
 
 `mdfmt` requires Go 1.26.5 or newer.

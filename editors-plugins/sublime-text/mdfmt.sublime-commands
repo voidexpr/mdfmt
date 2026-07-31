@@ -1,0 +1,6 @@
+[
+    {
+        "caption": "mdfmt: Open Current File",
+        "command": "mdfmt_open"
+    }
+]
