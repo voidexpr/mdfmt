@@ -605,7 +605,7 @@ func TestServedStylesheetIncludesSyntaxThemes(t *testing.T) {
 	}
 }
 
-func TestDefaultBindingIsLoopbackAndPortIsRandom(t *testing.T) {
+func TestDefaultBindingIsLoopbackAndPortIsManaged(t *testing.T) {
 	cfg, err := parseServeFlags(nil, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -615,6 +615,9 @@ func TestDefaultBindingIsLoopbackAndPortIsRandom(t *testing.T) {
 	}
 	if cfg.port != 0 {
 		t.Errorf("default port = %d, want 0", cfg.port)
+	}
+	if cfg.portSet {
+		t.Error("default port was marked explicit")
 	}
 	if cfg.root != "." {
 		t.Errorf("default root = %q", cfg.root)

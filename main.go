@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -22,6 +21,7 @@ const defaultBind = "127.0.0.1"
 type serveConfig struct {
 	bind        string
 	port        int
+	portSet     bool
 	root        string
 	editCommand string
 	editArgs    []string
@@ -59,7 +59,7 @@ func parseServeFlags(args []string, output io.Writer) (serveConfig, error) {
 		"Editor flags optionally add controls that launch a local editor.",
 		"Flags may appear before or after PATH.")
 	flags.StringVar(&cfg.bind, "bind", defaultBind, "IP address to bind")
-	flags.IntVar(&cfg.port, "port", 0, "TCP port (0 chooses a random free port)")
+	flags.IntVar(&cfg.port, "port", 0, "TCP port (successful starts remember the actual port)")
 	flags.StringVar(&cfg.editCommand, "edit-command", "", "editor command to launch for Markdown files")
 	flags.StringArrayVar(&cfg.editArgs, "edit-arg", nil, "editor argument before the file path (repeatable)")
 	flags.BoolVar(&cfg.editSublime, "edit-sublime", false, "enable editing with the Sublime Text CLI")
@@ -67,6 +67,7 @@ func parseServeFlags(args []string, output io.Writer) (serveConfig, error) {
 	if err := flags.Parse(args); err != nil {
 		return serveConfig{}, err
 	}
+	cfg.portSet = flags.Changed("port")
 	if flags.NArg() > 1 {
 		flags.Usage()
 		return serveConfig{}, fmt.Errorf("expected at most one PATH")
@@ -128,8 +129,10 @@ func printRootUsage(output io.Writer) {
 	fmt.Fprintln(output, "Usage: mdfmt <command> [options]")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Commands:")
-	fmt.Fprintln(output, "  serve  Serve a directory of Markdown files")
-	fmt.Fprintln(output, "  save   Render one source file as standalone HTML")
+	fmt.Fprintln(output, "  serve   Serve a directory of Markdown files")
+	fmt.Fprintln(output, "  open    Open served Markdown files and directories")
+	fmt.Fprintln(output, "  config  Show remembered roots, ports, and listening PIDs")
+	fmt.Fprintln(output, "  save    Render one source file as standalone HTML")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Run \"mdfmt <command> --help\" for command-specific help.")
 }
@@ -150,6 +153,17 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		return runServe(cfg, stdout, log.New(stderr, "mdfmt: ", log.LstdFlags))
+	case "open":
+		cfg, err := parseOpenFlags(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return runOpen(cfg, stdout)
+	case "config":
+		if err := parseConfigFlags(args[1:], stderr); err != nil {
+			return err
+		}
+		return runConfig(stdout)
 	case "save":
 		cfg, err := parseSaveFlags(args[1:], stderr)
 		if err != nil {
@@ -184,7 +198,7 @@ func runServe(cfg serveConfig, stdout io.Writer, logger *log.Logger) error {
 	}
 	handler.editor = editor
 
-	listener, err := net.Listen("tcp", net.JoinHostPort(cfg.bind, strconv.Itoa(cfg.port)))
+	listener, err := listenForServe(cfg, handler.root)
 	if err != nil {
 		return err
 	}
