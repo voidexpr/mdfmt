@@ -137,6 +137,7 @@ gracefully on SIGINT or SIGTERM, and does not write to the served tree.
 mdfmt open ./docs/guide.md
 mdfmt open ./docs/guide.md "./docs/API notes.md" --print-only
 mdfmt open ./guide.md --root ./docs --port 8642
+mdfmt open ./docs/guide.md --chrome
 ```
 
 `open` resolves each file or directory, finds the longest containing root in
@@ -149,13 +150,18 @@ browser is opened. Files must be Markdown files that the server can expose.
 | `--port PORT` | remembered for the selected root | Use this port in every generated URL. |
 | `--root PATH` | inferred independently for each path | Force every path to be beneath this root. Together with `--port`, the root need not be registered. |
 | `--bind ADDRESS` | `127.0.0.1` | Use this IP address as the URL host, for a server started with an unusual bind address. |
+| `--chrome` | disabled | On macOS, open each URL with Google Chrome and pass `--focus=URL/*`. |
 | `--print-only` | disabled | Print URLs without launching a browser. |
 
 When paths belong to different registered roots, each URL uses the port for its
 own longest matching root. URL path components are escaped independently, and
 directory URLs end in a slash. On macOS the browser launcher is `open`; on
-Linux it is `xdg-open`. If the platform launcher is unavailable, URL printing
-still succeeds.
+Linux it is `xdg-open`. On macOS, when Google Chrome is the default browser,
+`mdfmt` automatically invokes Chrome with the same focused-tab behavior as
+`--chrome`. This is detected directly from the local Launch Services preferences
+using macOS's `plutil`; it does not require `jq` or a cache. The flag remains
+available to force Chrome when it is not the default. If browser detection fails
+or the default platform launcher is unavailable, URL printing still succeeds.
 
 ### Inspect remembered ports
 

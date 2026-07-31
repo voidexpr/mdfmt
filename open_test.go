@@ -16,6 +16,7 @@ func TestParseOpenFlagsAllowsInterspersedPaths(t *testing.T) {
 		"two.md",
 		"--port", "8642",
 		"--root", "./docs",
+		"--chrome",
 		"--print-only",
 	}, io.Discard)
 	if err != nil {
@@ -26,8 +27,21 @@ func TestParseOpenFlagsAllowsInterspersedPaths(t *testing.T) {
 		cfg.port != 8642 ||
 		!cfg.portSet ||
 		cfg.root != "./docs" ||
+		!cfg.chrome ||
 		!cfg.printOnly {
 		t.Errorf("parseOpenFlags() = %#v", cfg)
+	}
+}
+
+func TestChromeArgumentsFocusServedURL(t *testing.T) {
+	targetURL := "http://127.0.0.1:8642/Guide%20one.md"
+	got := chromeArguments(targetURL)
+	want := []string{
+		"--focus=http://127.0.0.1:8642/Guide%20one.md/*",
+		targetURL,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("chromeArguments() = %q, want %q", got, want)
 	}
 }
 

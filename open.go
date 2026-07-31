@@ -18,19 +18,23 @@ type openConfig struct {
 	portSet   bool
 	root      string
 	bind      string
+	chrome    bool
 	printOnly bool
 }
+
+const chromeExecutable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 func parseOpenFlags(args []string, output io.Writer) (openConfig, error) {
 	cfg := openConfig{bind: defaultBind}
 	flags := newFlagSet("mdfmt open", output,
-		"Usage: mdfmt open PATH... [--port PORT] [--root PATH] [--bind ADDRESS] [--print-only]",
+		"Usage: mdfmt open PATH... [--port PORT] [--root PATH] [--bind ADDRESS] [--chrome] [--print-only]",
 		"Print URLs for files or directories served by mdfmt and open them in a browser.",
 		"Without --root, each path uses its longest matching root from ~/.mdfmt/ports.json.",
 		"Flags may appear before, after, or between paths.")
 	flags.IntVar(&cfg.port, "port", 0, "override the remembered TCP port")
 	flags.StringVar(&cfg.root, "root", "", "use this root for every path")
 	flags.StringVar(&cfg.bind, "bind", defaultBind, "address to use in generated URLs")
+	flags.BoolVar(&cfg.chrome, "chrome", false, "open with Google Chrome on macOS")
 	flags.BoolVar(&cfg.printOnly, "print-only", false, "print URLs without opening a browser")
 	if err := flags.Parse(args); err != nil {
 		return openConfig{}, err
@@ -74,6 +78,9 @@ func runOpen(cfg openConfig, stdout io.Writer) error {
 	}
 	if cfg.printOnly {
 		return nil
+	}
+	if cfg.chrome || defaultBrowserIsChrome(urls[0]) {
+		return launchChrome(urls)
 	}
 	return launchBrowser(urls)
 }
@@ -176,4 +183,27 @@ func launchBrowser(urls []string) error {
 		return fmt.Errorf("open browser: %w", err)
 	}
 	return nil
+}
+
+func launchChrome(urls []string) error {
+	if runtime.GOOS != "darwin" {
+		return errors.New("--chrome is only supported on macOS")
+	}
+	executable, err := exec.LookPath(chromeExecutable)
+	if errors.Is(err, exec.ErrNotFound) {
+		return fmt.Errorf("find Google Chrome at %s: executable not found", chromeExecutable)
+	}
+	if err != nil {
+		return fmt.Errorf("find Google Chrome: %w", err)
+	}
+	for _, targetURL := range urls {
+		if err := exec.Command(executable, chromeArguments(targetURL)...).Run(); err != nil {
+			return fmt.Errorf("open %s in Google Chrome: %w", targetURL, err)
+		}
+	}
+	return nil
+}
+
+func chromeArguments(targetURL string) []string {
+	return []string{"--focus=" + targetURL + "/*", targetURL}
 }
