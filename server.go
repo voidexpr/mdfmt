@@ -56,10 +56,11 @@ func joinAssets(names ...string) []byte {
 }
 
 type markdownServer struct {
-	root     string
-	logger   *log.Logger
-	markdown goldmark.Markdown
-	editor   *editorLauncher
+	root      string
+	logger    *log.Logger
+	markdown  goldmark.Markdown
+	editor    *editorLauncher
+	pathToken string
 
 	cacheMu    sync.RWMutex
 	titleCache map[string]cachedTitle
@@ -72,20 +73,22 @@ type cachedTitle struct {
 }
 
 type pageData struct {
-	Title       string
-	Directory   string
-	Breadcrumbs []breadcrumb
-	Parent      *navEntry
-	Directories []navEntry
-	Files       []navEntry
-	Body        template.HTML
-	TOC         []*tocItem
-	TopURL      template.URL
-	IsDocument  bool
-	ShowTitle   bool
-	CanEdit     bool
-	Edit        *editAction
-	RawURL      template.URL
+	Title         string
+	Directory     string
+	Breadcrumbs   []breadcrumb
+	Parent        *navEntry
+	Directories   []navEntry
+	Files         []navEntry
+	Body          template.HTML
+	TOC           []*tocItem
+	TopURL        template.URL
+	IsDocument    bool
+	ShowTitle     bool
+	CanEdit       bool
+	Edit          *editAction
+	RawURL        template.URL
+	StylesheetURL template.URL
+	ScriptURL     template.URL
 }
 
 type breadcrumb struct {
@@ -163,6 +166,11 @@ func resolveExisting(path string) (string, fs.FileInfo, error) {
 
 func (s *markdownServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	setSecurityHeaders(w.Header(), s.editor != nil)
+	routed, ok := s.stripPathToken(w, r)
+	if !ok {
+		return
+	}
+	r = routed
 	if r.URL.Path == editEndpoint {
 		s.serveEdit(w, r)
 		return
@@ -189,7 +197,7 @@ func (s *markdownServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if info.IsDir() {
 		if r.URL.Path != "/" && !strings.HasSuffix(r.URL.Path, "/") {
-			http.Redirect(w, r, escapedURL(components, true), http.StatusMovedPermanently)
+			http.Redirect(w, r, servedURL(s.pathToken, components, true), http.StatusMovedPermanently)
 			return
 		}
 		if err := s.serveDirectory(w, r, resolved, components); err != nil {
@@ -214,6 +222,38 @@ func (s *markdownServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := s.serveMarkdown(w, r, resolved, info, components); err != nil {
 		s.writeRouteError(w, r, err)
 	}
+}
+
+func (s *markdownServer) stripPathToken(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
+	if s.pathToken == "" {
+		return r, true
+	}
+	if r.URL.RawPath != "" {
+		decoded, err := url.PathUnescape(r.URL.RawPath)
+		if err != nil || decoded != r.URL.Path {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return nil, false
+		}
+	}
+	prefix := "/" + s.pathToken
+	if r.URL.Path == prefix {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			http.Redirect(w, r, prefix+"/", http.StatusMovedPermanently)
+		} else {
+			http.NotFound(w, r)
+		}
+		return nil, false
+	}
+	if !strings.HasPrefix(r.URL.Path, prefix+"/") {
+		http.NotFound(w, r)
+		return nil, false
+	}
+	clone := r.Clone(r.Context())
+	clonedURL := *r.URL
+	clonedURL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+	clonedURL.RawPath = ""
+	clone.URL = &clonedURL
+	return clone, true
 }
 
 func setSecurityHeaders(header http.Header, editing bool) {
@@ -377,14 +417,16 @@ func (s *markdownServer) serveDirectory(w http.ResponseWriter, r *http.Request, 
 		name = components[len(components)-1]
 	}
 	data := pageData{
-		Title:       name,
-		Directory:   name,
-		Breadcrumbs: breadcrumbsFor(s.root, components, nil),
-		Parent:      parentEntry(components),
-		Directories: directories,
-		Files:       files,
-		ShowTitle:   true,
-		CanEdit:     s.editor != nil,
+		Title:         name,
+		Directory:     name,
+		Breadcrumbs:   s.breadcrumbsFor(components, nil),
+		Parent:        s.parentEntry(components),
+		Directories:   directories,
+		Files:         files,
+		ShowTitle:     true,
+		CanEdit:       s.editor != nil,
+		StylesheetURL: template.URL(s.pageURL(components, []string{".mdfmt", "style.css"}, false) + "?v=6"),
+		ScriptURL:     template.URL(s.pageURL(components, []string{".mdfmt", "app.js"}, false) + "?v=5"),
 	}
 	return s.writePage(w, r, data)
 }
@@ -394,7 +436,7 @@ func (s *markdownServer) serveMarkdown(w http.ResponseWriter, r *http.Request, f
 	if err != nil {
 		return fileError(err)
 	}
-	rendered, err := renderMarkdownDocument(s.markdown, source, filename)
+	rendered, err := renderMarkdownDocumentForServe(s.markdown, source, filename, components[:len(components)-1], s.pathToken != "")
 	if err != nil {
 		return &routeError{status: http.StatusInternalServerError, err: fmt.Errorf("render markdown: %w", err)}
 	}
@@ -411,24 +453,30 @@ func (s *markdownServer) serveMarkdown(w http.ResponseWriter, r *http.Request, f
 	if err != nil {
 		return err
 	}
+	rawURL := s.pageURL(directoryComponents, components, false) + "?raw=1"
+	if s.pathToken != "" {
+		rawURL = "?raw=1"
+	}
 	data := pageData{
 		Title:     rendered.Title,
 		Directory: directoryName(s.root, directoryComponents),
-		Breadcrumbs: breadcrumbsFor(s.root, directoryComponents, &breadcrumb{
+		Breadcrumbs: s.breadcrumbsFor(directoryComponents, &breadcrumb{
 			Name: components[len(components)-1],
 			Meta: fileBreadcrumbMeta(info, time.Now()),
 		}),
-		Parent:      parentEntry(directoryComponents),
-		Directories: directories,
-		Files:       files,
-		Body:        rendered.Body,
-		TOC:         rendered.TOC,
-		TopURL:      template.URL(escapedURL(components, false)),
-		IsDocument:  true,
-		ShowTitle:   !rendered.HasH1,
-		CanEdit:     s.editor != nil,
-		Edit:        s.editAction(components, escapedURL(components, false)),
-		RawURL:      template.URL(escapedURL(components, false) + "?raw=1"),
+		Parent:        s.parentEntry(directoryComponents),
+		Directories:   directories,
+		Files:         files,
+		Body:          rendered.Body,
+		TOC:           rendered.TOC,
+		TopURL:        template.URL(s.pageURL(directoryComponents, components, false)),
+		IsDocument:    true,
+		ShowTitle:     !rendered.HasH1,
+		CanEdit:       s.editor != nil,
+		Edit:          s.editAction(components, directoryComponents, components, false),
+		RawURL:        template.URL(rawURL),
+		StylesheetURL: template.URL(s.pageURL(directoryComponents, []string{".mdfmt", "style.css"}, false) + "?v=6"),
+		ScriptURL:     template.URL(s.pageURL(directoryComponents, []string{".mdfmt", "app.js"}, false) + "?v=5"),
 	}
 	return s.writePage(w, r, data)
 }
@@ -474,10 +522,44 @@ type renderedDocument struct {
 }
 
 func renderMarkdownDocument(markdown goldmark.Markdown, source []byte, filename string) (renderedDocument, error) {
+	return renderMarkdownDocumentWithRootLinks(markdown, source, filename, nil, false)
+}
+
+func renderMarkdownDocumentForServe(
+	markdown goldmark.Markdown,
+	source []byte,
+	filename string,
+	directoryComponents []string,
+	rewriteRootLinks bool,
+) (renderedDocument, error) {
+	return renderMarkdownDocumentWithRootLinks(
+		markdown,
+		source,
+		filename,
+		directoryComponents,
+		rewriteRootLinks,
+	)
+}
+
+func renderMarkdownDocumentWithRootLinks(
+	markdown goldmark.Markdown,
+	source []byte,
+	filename string,
+	directoryComponents []string,
+	rewriteRootLinks bool,
+) (renderedDocument, error) {
 	document := markdown.Parser().Parse(text.NewReader(source))
 	rendered := renderedDocument{Title: stem(filepath.Base(filename))}
 	headings := make([]*ast.Heading, 0)
 	if err := ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering && rewriteRootLinks {
+			switch node := node.(type) {
+			case *ast.Link:
+				node.Destination = rewriteRootRelativeDestination(node.Destination, directoryComponents)
+			case *ast.Image:
+				node.Destination = rewriteRootRelativeDestination(node.Destination, directoryComponents)
+			}
+		}
 		heading, ok := node.(*ast.Heading)
 		if !entering || !ok {
 			return ast.WalkContinue, nil
@@ -507,6 +589,29 @@ func renderMarkdownDocument(markdown goldmark.Markdown, source []byte, filename 
 	// Goldmark escapes content; unsafe HTML is disabled.
 	rendered.Body = template.HTML(body)
 	return rendered, nil
+}
+
+func rewriteRootRelativeDestination(destination []byte, directoryComponents []string) []byte {
+	raw := string(destination)
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+		return destination
+	}
+	target, err := url.Parse(raw)
+	if err != nil || target.Scheme != "" || target.Host != "" || target.User != nil {
+		return destination
+	}
+	components, err := requestComponents(target)
+	if err != nil {
+		return destination
+	}
+	rewritten := relativeURL(directoryComponents, components, strings.HasSuffix(target.Path, "/"))
+	if target.ForceQuery || target.RawQuery != "" {
+		rewritten += "?" + target.RawQuery
+	}
+	if target.Fragment != "" {
+		rewritten += "#" + target.EscapedFragment()
+	}
+	return []byte(rewritten)
 }
 
 func buildTOC(source []byte, headings []*ast.Heading) []*tocItem {
@@ -567,7 +672,7 @@ func (s *markdownServer) listDirectory(directory string, components []string, ac
 			directories = append(directories, navEntry{
 				Name:  name,
 				Title: name,
-				URL:   template.URL(escapedURL(entryComponents, true)),
+				URL:   template.URL(s.pageURL(components, entryComponents, true)),
 				IsDir: true,
 			})
 		case info.Mode().IsRegular() && isMarkdownName(name) && isMarkdownName(info.Name()):
@@ -583,7 +688,7 @@ func (s *markdownServer) listDirectory(directory string, components []string, ac
 			files = append(files, navEntry{
 				Name:         name,
 				Title:        title,
-				URL:          template.URL(escapedURL(entryComponents, false)),
+				URL:          template.URL(s.pageURL(components, entryComponents, false)),
 				Modified:     info.ModTime().Format("Jan 2, 2006 15:04"),
 				ModifiedFull: info.ModTime().Format(time.RFC3339),
 				Ago:          humanAgo(info.ModTime(), now),
@@ -591,7 +696,7 @@ func (s *markdownServer) listDirectory(directory string, components []string, ac
 				SortModified: info.ModTime().UnixNano(),
 				SortSize:     info.Size(),
 				Active:       name == active,
-				Edit:         s.editAction(entryComponents, escapedURL(components, true)),
+				Edit:         s.editAction(entryComponents, components, components, true),
 			})
 		}
 	}
@@ -669,18 +774,68 @@ func breadcrumbsFor(root string, directoryComponents []string, document *breadcr
 	return crumbs
 }
 
-func parentEntry(components []string) *navEntry {
+func (s *markdownServer) breadcrumbsFor(directoryComponents []string, document *breadcrumb) []breadcrumb {
+	crumbs := []breadcrumb{{
+		Name: filepath.Base(s.root),
+		URL:  template.URL(s.pageURL(directoryComponents, nil, true)),
+	}}
+	for i, component := range directoryComponents {
+		crumbs = append(crumbs, breadcrumb{
+			Name: component,
+			URL:  template.URL(s.pageURL(directoryComponents, directoryComponents[:i+1], true)),
+		})
+	}
+	if document != nil {
+		crumbs = append(crumbs, *document)
+	}
+	return crumbs
+}
+
+func (s *markdownServer) parentEntry(components []string) *navEntry {
 	if len(components) == 0 {
 		return nil
 	}
-	parentComponents := components[:len(components)-1]
 	name := "Parent directory"
 	return &navEntry{
 		Name:  name,
 		Title: name,
-		URL:   template.URL(escapedURL(parentComponents, true)),
+		URL:   template.URL(s.pageURL(components, components[:len(components)-1], true)),
 		IsDir: true,
 	}
+}
+
+func (s *markdownServer) pageURL(baseDirectory, target []string, directory bool) string {
+	if s.pathToken == "" {
+		return escapedURL(target, directory)
+	}
+	// Relative URLs inherit the secret prefix from the current browser URL
+	// without placing that prefix in the generated HTML.
+	return relativeURL(baseDirectory, target, directory)
+}
+
+func relativeURL(baseDirectory, target []string, directory bool) string {
+	common := 0
+	for common < len(baseDirectory) && common < len(target) && baseDirectory[common] == target[common] {
+		common++
+	}
+	parts := make([]string, 0, len(baseDirectory)-common+len(target)-common)
+	for i := common; i < len(baseDirectory); i++ {
+		parts = append(parts, "..")
+	}
+	for _, component := range target[common:] {
+		parts = append(parts, url.PathEscape(component))
+	}
+	if len(parts) == 0 {
+		if directory {
+			return "./"
+		}
+		return ""
+	}
+	result := strings.Join(parts, "/")
+	if directory {
+		result += "/"
+	}
+	return result
 }
 
 func directoryName(root string, components []string) string {

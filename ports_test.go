@@ -32,6 +32,11 @@ func TestManagedPortIsRecordedAndReused(t *testing.T) {
 		first.Close()
 		t.Fatalf("remembered port = %d, want %d", got, firstPort)
 	}
+	firstToken := registry.Roots[root].PathToken
+	if firstToken == nil || *firstToken == "" {
+		first.Close()
+		t.Fatal("automatic path token was not recorded")
+	}
 	info, err := os.Stat(registryPath)
 	if err != nil {
 		first.Close()
@@ -52,6 +57,50 @@ func TestManagedPortIsRecordedAndReused(t *testing.T) {
 	defer second.Close()
 	if got := second.Addr().(*net.TCPAddr).Port; got != firstPort {
 		t.Errorf("reused port = %d, want %d", got, firstPort)
+	}
+	registry, err = readPortsFile(registryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := registry.Roots[root].PathToken; got == nil || *got != *firstToken {
+		t.Errorf("reused path token = %v, want %q", got, *firstToken)
+	}
+}
+
+func TestExplicitNoneIsRecordedAndNextAutoGeneratesToken(t *testing.T) {
+	root := t.TempDir()
+	registryPath := filepath.Join(t.TempDir(), ".mdfmt", "ports.json")
+	withoutToken, err := listenWithPortRegistry(serveConfig{
+		bind:      defaultBind,
+		pathToken: pathTokenNone,
+	}, root, registryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withoutToken.pathToken != "" {
+		t.Errorf("none listener token = %q", withoutToken.pathToken)
+	}
+	if err := withoutToken.Close(); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := readPortsFile(registryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := registry.Roots[root].PathToken; got == nil || *got != "" {
+		t.Errorf("recorded none token = %v", got)
+	}
+
+	withToken, err := listenWithPortRegistry(serveConfig{
+		bind:      defaultBind,
+		pathToken: pathTokenAuto,
+	}, root, registryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer withToken.Close()
+	if withToken.pathToken == "" {
+		t.Fatal("auto reused the previous explicit none")
 	}
 }
 
@@ -247,5 +296,26 @@ func TestReadPortsFileRejectsInvalidData(t *testing.T) {
 	}
 	if _, err := readPortsFile(filename); err == nil || !strings.Contains(err.Error(), "unsupported version") {
 		t.Fatalf("version error = %v", err)
+	}
+
+	if err := os.WriteFile(filename, []byte(`{"version":1,"roots":{"/docs":{"port":8642,"path_token":"bad/token"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readPortsFile(filename); err == nil || !strings.Contains(err.Error(), "invalid path token") {
+		t.Fatalf("path token error = %v", err)
+	}
+}
+
+func TestReadPortsFileAcceptsLegacyEntryWithoutPathToken(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(filename, []byte(`{"version":1,"roots":{"/docs":{"port":8642}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := readPortsFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.Roots["/docs"].PathToken != nil {
+		t.Errorf("legacy entry unexpectedly has a path token: %#v", registry.Roots["/docs"])
 	}
 }

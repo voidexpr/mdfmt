@@ -23,6 +23,7 @@ type serveConfig struct {
 	port        int
 	portSet     bool
 	root        string
+	pathToken   string
 	editCommand string
 	editArgs    []string
 	editSublime bool
@@ -52,14 +53,15 @@ func newFlagSet(name string, output io.Writer, usage string, description ...stri
 }
 
 func parseServeFlags(args []string, output io.Writer) (serveConfig, error) {
-	cfg := serveConfig{bind: defaultBind}
+	cfg := serveConfig{bind: defaultBind, pathToken: pathTokenAuto}
 	flags := newFlagSet("mdfmt serve", output,
-		"Usage: mdfmt serve [--bind IP] [--port NUM] [PATH]",
+		"Usage: mdfmt serve [--bind IP] [--port NUM] [--path-token VALUE] [PATH]",
 		"Serve a directory of Markdown files as a read-only website.",
 		"Editor flags optionally add controls that launch a local editor.",
 		"Flags may appear before or after PATH.")
 	flags.StringVar(&cfg.bind, "bind", defaultBind, "IP address to bind")
 	flags.IntVar(&cfg.port, "port", 0, "TCP port (successful starts remember the actual port)")
+	flags.StringVar(&cfg.pathToken, "path-token", pathTokenAuto, "URL path token: auto, none, or a custom value")
 	flags.StringVar(&cfg.editCommand, "edit-command", "", "editor command to launch for Markdown files")
 	flags.StringArrayVar(&cfg.editArgs, "edit-arg", nil, "editor argument before the file path (repeatable)")
 	flags.BoolVar(&cfg.editSublime, "edit-sublime", false, "enable editing with the Sublime Text CLI")
@@ -83,6 +85,9 @@ func parseServeFlags(args []string, output io.Writer) (serveConfig, error) {
 	}
 	if cfg.port < 0 || cfg.port > 65535 {
 		return serveConfig{}, fmt.Errorf("--port must be between 0 and 65535")
+	}
+	if err := validatePathTokenOption(cfg.pathToken); err != nil {
+		return serveConfig{}, err
 	}
 	editorSelections := 0
 	if cfg.editCommand != "" {
@@ -202,6 +207,7 @@ func runServe(cfg serveConfig, stdout io.Writer, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
+	handler.pathToken = listener.pathToken
 	if handler.editor != nil {
 		handler.editor.allowedHost = listener.Addr().String()
 	}
@@ -211,7 +217,7 @@ func runServe(cfg serveConfig, stdout io.Writer, logger *log.Logger) error {
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	logger.Printf("serving %s at http://%s", handler.root, listener.Addr())
+	logger.Printf("serving %s at http://%s%s", handler.root, listener.Addr(), servedURL(listener.pathToken, nil, true))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"mime"
@@ -37,6 +38,7 @@ type editorLauncher struct {
 }
 
 type editAction struct {
+	Action    template.URL
 	Path      string
 	ReturnURL string
 	Token     string
@@ -124,7 +126,7 @@ func resolveEditorExecutable(command string) (string, error) {
 	return filepath.Clean(absolute), nil
 }
 
-func (s *markdownServer) editAction(components []string, returnURL string) *editAction {
+func (s *markdownServer) editAction(components, pageDirectory, returnComponents []string, returnDirectory bool) *editAction {
 	if s.editor == nil {
 		return nil
 	}
@@ -133,8 +135,9 @@ func (s *markdownServer) editAction(components []string, returnURL string) *edit
 		label = components[len(components)-1]
 	}
 	return &editAction{
+		Action:    template.URL(s.pageURL(pageDirectory, []string{".mdfmt", "edit"}, false)),
 		Path:      escapedURL(components, false),
-		ReturnURL: returnURL,
+		ReturnURL: escapedURL(returnComponents, returnDirectory),
 		Token:     s.editor.token,
 		Label:     label,
 	}
@@ -185,6 +188,9 @@ func (s *markdownServer) serveEdit(w http.ResponseWriter, r *http.Request) {
 	returnURL := safeLocalReturnURL(r.PostForm.Get("return"))
 	if returnURL == "" {
 		returnURL = "/"
+	}
+	if s.pathToken != "" {
+		returnURL = "/" + s.pathToken + returnURL
 	}
 	http.Redirect(w, r, returnURL, http.StatusSeeOther)
 }

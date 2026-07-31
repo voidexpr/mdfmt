@@ -301,6 +301,137 @@ func TestBreadcrumbConstruction(t *testing.T) {
 	}
 }
 
+func TestRelativeURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		base      []string
+		target    []string
+		directory bool
+		want      string
+	}{
+		{name: "root from nested", base: []string{"foo", "bar"}, directory: true, want: "../../"},
+		{name: "sibling file", base: []string{"foo", "bar"}, target: []string{"foo", "bar", "next.md"}, want: "next.md"},
+		{name: "parent directory", base: []string{"foo", "bar"}, target: []string{"foo"}, directory: true, want: "../"},
+		{name: "escaped target", base: []string{"foo"}, target: []string{"a b", "Guide #1.md"}, want: "../a%20b/Guide%20%231.md"},
+		{name: "current directory", base: []string{"foo"}, target: []string{"foo"}, directory: true, want: "./"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := relativeURL(test.base, test.target, test.directory); got != test.want {
+				t.Errorf("relativeURL() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestServedMarkdownRewritesRootRelativeLinks(t *testing.T) {
+	source := []byte(strings.Join([]string{
+		"[root](/guide.md?view=full#install)",
+		"[home](/)",
+		"[relative](next.md)",
+		"[external](https://example.com/guide.md)",
+		"[network](//example.com/guide.md)",
+		"![image](/images/example.png)",
+	}, "\n\n"))
+	rendered, err := renderMarkdownDocumentForServe(
+		newGoldmark(),
+		source,
+		"current.md",
+		[]string{"foo", "bar"},
+		true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(rendered.Body)
+	for _, want := range []string{
+		`href="../../guide.md?view=full#install"`,
+		`href="../../"`,
+		`href="next.md"`,
+		`href="https://example.com/guide.md"`,
+		`href="//example.com/guide.md"`,
+		`src="../../images/example.png"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("rendered body does not contain %q:\n%s", want, body)
+		}
+	}
+
+	standalone, err := renderMarkdownDocument(newGoldmark(), []byte("[root](/guide.md)\n"), "current.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(standalone.Body), `href="/guide.md"`) {
+		t.Errorf("ordinary rendering rewrote a root-relative link:\n%s", standalone.Body)
+	}
+}
+
+func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
+	const token = "secret-path-token-123"
+	root := t.TempDir()
+	writeTestFile(t, root, "root.md", "# Root\n")
+	writeTestFile(t, root, "foo/bar/guide.md", "# Guide\n\n[Root](/root.md)\n")
+	writeTestFile(t, root, "foo/bar/next.md", "# Next\n")
+	server := testServer(t, root)
+	server.pathToken = token
+	server.editor = &editorLauncher{token: "editor-request-token"}
+
+	for _, target := range []string{"/", "/root.md", "/wrong/root.md", "/.mdfmt/style.css"} {
+		response := request(t, server, target)
+		if response.Code != http.StatusNotFound {
+			t.Errorf("unprefixed/wrong route %q status = %d, want 404", target, response.Code)
+		}
+	}
+
+	rootRedirect := request(t, server, "/"+token)
+	if rootRedirect.Code != http.StatusMovedPermanently || rootRedirect.Header().Get("Location") != "/"+token+"/" {
+		t.Errorf("token root redirect: status=%d location=%q", rootRedirect.Code, rootRedirect.Header().Get("Location"))
+	}
+	directoryRedirect := request(t, server, "/"+token+"/foo/bar")
+	if directoryRedirect.Code != http.StatusMovedPermanently || directoryRedirect.Header().Get("Location") != "/"+token+"/foo/bar/" {
+		t.Errorf("directory redirect: status=%d location=%q", directoryRedirect.Code, directoryRedirect.Header().Get("Location"))
+	}
+
+	document := request(t, server, "/"+token+"/foo/bar/guide.md")
+	if document.Code != http.StatusOK {
+		t.Fatalf("document status = %d; body=%s", document.Code, document.Body.String())
+	}
+	body := document.Body.String()
+	if strings.Contains(body, token) {
+		t.Fatalf("document HTML leaked the path token:\n%s", body)
+	}
+	for _, want := range []string{
+		`href="../../.mdfmt/style.css?v=6"`,
+		`src="../../.mdfmt/app.js?v=5"`,
+		`href="../../root.md"`,
+		`href="next.md"`,
+		`href="?raw=1"`,
+		`action="../../.mdfmt/edit"`,
+		`name="return" value="/foo/bar/guide.md"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("document HTML does not contain %q:\n%s", want, body)
+		}
+	}
+
+	directory := request(t, server, "/"+token+"/foo/bar/")
+	if directory.Code != http.StatusOK {
+		t.Fatalf("directory status = %d; body=%s", directory.Code, directory.Body.String())
+	}
+	if strings.Contains(directory.Body.String(), token) {
+		t.Fatalf("directory HTML leaked the path token:\n%s", directory.Body.String())
+	}
+
+	raw := request(t, server, "/"+token+"/foo/bar/guide.md?raw=1")
+	if raw.Code != http.StatusOK || !strings.Contains(raw.Body.String(), "[Root](/root.md)") {
+		t.Errorf("prefixed raw response: status=%d body=%s", raw.Code, raw.Body.String())
+	}
+	asset := request(t, server, "/"+token+"/.mdfmt/style.css?v=6")
+	if asset.Code != http.StatusOK {
+		t.Errorf("prefixed asset status = %d", asset.Code)
+	}
+}
+
 func TestFileAndDirectoryRouting(t *testing.T) {
 	root := t.TempDir()
 	guideContent := "# Guide\n\nHello, docs.\n"
@@ -621,6 +752,9 @@ func TestDefaultBindingIsLoopbackAndPortIsManaged(t *testing.T) {
 	}
 	if cfg.root != "." {
 		t.Errorf("default root = %q", cfg.root)
+	}
+	if cfg.pathToken != pathTokenAuto {
+		t.Errorf("default path token = %q, want auto", cfg.pathToken)
 	}
 }
 

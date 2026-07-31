@@ -18,6 +18,7 @@ type openConfig struct {
 	portSet   bool
 	root      string
 	bind      string
+	pathToken string
 	chrome    bool
 	printOnly bool
 }
@@ -25,15 +26,16 @@ type openConfig struct {
 const chromeExecutable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 func parseOpenFlags(args []string, output io.Writer) (openConfig, error) {
-	cfg := openConfig{bind: defaultBind}
+	cfg := openConfig{bind: defaultBind, pathToken: pathTokenAuto}
 	flags := newFlagSet("mdfmt open", output,
-		"Usage: mdfmt open PATH... [--port PORT] [--root PATH] [--bind ADDRESS] [--chrome] [--print-only]",
+		"Usage: mdfmt open PATH... [--port PORT] [--root PATH] [--bind ADDRESS] [--path-token VALUE] [--chrome] [--print-only]",
 		"Print URLs for files or directories served by mdfmt and open them in a browser.",
 		"Without --root, each path uses its longest matching root from ~/.mdfmt/ports.json.",
 		"Flags may appear before, after, or between paths.")
 	flags.IntVar(&cfg.port, "port", 0, "override the remembered TCP port")
 	flags.StringVar(&cfg.root, "root", "", "use this root for every path")
 	flags.StringVar(&cfg.bind, "bind", defaultBind, "address to use in generated URLs")
+	flags.StringVar(&cfg.pathToken, "path-token", pathTokenAuto, "URL path token: auto, none, or a custom value")
 	flags.BoolVar(&cfg.chrome, "chrome", false, "open with Google Chrome on macOS")
 	flags.BoolVar(&cfg.printOnly, "print-only", false, "print URLs without opening a browser")
 	if err := flags.Parse(args); err != nil {
@@ -51,6 +53,9 @@ func parseOpenFlags(args []string, output io.Writer) (openConfig, error) {
 	if net.ParseIP(cfg.bind) == nil {
 		return openConfig{}, fmt.Errorf("--bind must be an IP address, got %q", cfg.bind)
 	}
+	if err := validatePathTokenOption(cfg.pathToken); err != nil {
+		return openConfig{}, err
+	}
 	return cfg, nil
 }
 
@@ -59,7 +64,7 @@ func runOpen(cfg openConfig, stdout io.Writer) error {
 		Version: portsFileVersion,
 		Roots:   make(map[string]portEntry),
 	}
-	if cfg.root == "" || !cfg.portSet {
+	if cfg.root == "" || !cfg.portSet || cfg.pathToken == pathTokenAuto {
 		filename, err := portsFilePath()
 		if err != nil {
 			return err
@@ -122,12 +127,24 @@ func openURLs(cfg openConfig, registry portsFile) ([]string, error) {
 		}
 
 		port := cfg.port
+		entry, registered := registry.Roots[root]
 		if !cfg.portSet {
-			entry, ok := registry.Roots[root]
-			if !ok {
+			if !registered {
 				return nil, fmt.Errorf("no remembered port for root %s", root)
 			}
 			port = entry.Port
+		}
+		pathToken := ""
+		switch cfg.pathToken {
+		case pathTokenAuto:
+			if !registered || entry.PathToken == nil {
+				return nil, fmt.Errorf("no remembered path token for root %s; specify --path-token", root)
+			}
+			pathToken = *entry.PathToken
+		case pathTokenNone:
+			pathToken = ""
+		default:
+			pathToken = cfg.pathToken
 		}
 		relative, err := filepath.Rel(root, resolved)
 		if err != nil {
@@ -137,7 +154,7 @@ func openURLs(cfg openConfig, registry portsFile) ([]string, error) {
 		if relative != "." {
 			components = strings.Split(relative, string(filepath.Separator))
 		}
-		route := escapedURL(components, info.IsDir())
+		route := servedURL(pathToken, components, info.IsDir())
 		host := net.JoinHostPort(cfg.bind, strconv.Itoa(port))
 		urls = append(urls, "http://"+host+route)
 	}

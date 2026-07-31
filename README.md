@@ -78,6 +78,7 @@ start records the actual bound port, including starts with an explicit port.
 | --- | --- | --- |
 | `--bind IP` | `127.0.0.1` | Bind to the given IP address. Hostnames are not accepted. |
 | `--port NUM` | remembered per root | Bind to the given TCP port and remember it for this root. An explicit `0` selects and remembers a random port. |
+| `--path-token VALUE` | `auto` | Prefix every served URL with a random, remembered path token. Use `none` to opt out for this launch, or supply a custom token. |
 | `--edit-command COMMAND` | disabled | Add Edit controls that directly launch `COMMAND`. |
 | `--edit-arg VALUE` | none | Insert an argument before the file path in the editor command. Repeat for multiple arguments. |
 | `--edit-sublime` | disabled | Add Edit controls using the Sublime Text `subl` CLI. |
@@ -91,11 +92,19 @@ updated atomically while the selected listener remains open. Its format is:
   "version": 1,
   "roots": {
     "/absolute/path/to/docs": {
-      "port": 49153
+      "port": 49153,
+      "path_token": "49caed1e8a8f263d54e824ad62e6b284"
     }
   }
 }
 ```
+
+In `auto` mode, `serve` reuses a remembered non-empty token or generates a new
+128-bit token. `--path-token none` records an unprefixed server for `open`, but
+the next `serve` using the default `auto` mode returns to a generated token.
+Custom tokens may contain 1–128 letters, digits, underscores, or hyphens.
+Legacy registry entries without `path_token` are accepted; `serve` upgrades
+them, while `open --path-token auto` asks for an explicit override until then.
 
 If a remembered port is occupied, `serve` leaves the association unchanged and
 reports how to choose a different explicit port. After that explicit port binds
@@ -113,6 +122,13 @@ Directory navigation, breadcrumbs, heading IDs, a table of contents, sorting,
 responsive light/dark styling, and static assets are self-contained in the
 binary. Unsafe raw HTML in Markdown is omitted. Every document page also has a
 Raw link that serves the exact source bytes as plain text.
+
+When path tokens are enabled, every document, directory, raw-source, asset, and
+editor endpoint requires the prefix. Missing or incorrect tokens return 404.
+Generated pages use relative internal URLs and never embed the path token in
+their HTML. Root-relative Markdown links such as `/guide.md` are rewritten to
+token-free relative links while serving; ordinary relative and external links
+are unchanged. Standalone HTML produced by `save` is unaffected.
 
 For quick local edits while browsing:
 
@@ -136,7 +152,7 @@ gracefully on SIGINT or SIGTERM, and does not write to the served tree.
 ```sh
 mdfmt open ./docs/guide.md
 mdfmt open ./docs/guide.md "./docs/API notes.md" --print-only
-mdfmt open ./guide.md --root ./docs --port 8642
+mdfmt open ./guide.md --root ./docs --port 8642 --path-token none
 mdfmt open ./docs/guide.md --chrome
 ```
 
@@ -148,15 +164,19 @@ browser is opened. Files must be Markdown files that the server can expose.
 | Option | Default | Behavior |
 | --- | --- | --- |
 | `--port PORT` | remembered for the selected root | Use this port in every generated URL. |
-| `--root PATH` | inferred independently for each path | Force every path to be beneath this root. Together with `--port`, the root need not be registered. |
+| `--root PATH` | inferred independently for each path | Force every path to be beneath this root. Together with `--port` and an explicit path-token value, the root need not be registered. |
 | `--bind ADDRESS` | `127.0.0.1` | Use this IP address as the URL host, for a server started with an unusual bind address. |
+| `--path-token VALUE` | `auto` | Read each root's remembered token. Use `none` for an unprefixed URL or supply a custom token. |
 | `--chrome` | disabled | On macOS, open each URL with Google Chrome and pass `--focus=URL/*`. |
 | `--print-only` | disabled | Print URLs without launching a browser. |
 
 When paths belong to different registered roots, each URL uses the port for its
-own longest matching root. URL path components are escaped independently, and
-directory URLs end in a slash. On macOS the browser launcher is `open`; on
-Linux it is `xdg-open`. On macOS, when Google Chrome is the default browser,
+own longest matching root and, in `auto` mode, that root's remembered path
+token. Auto mode fails rather than guessing when a legacy or unregistered root
+has no token; use `none` or a custom value explicitly in that case. URL path
+components are escaped independently, and directory URLs end in a slash. On
+macOS the browser launcher is `open`; on Linux it is `xdg-open`. On macOS, when
+Google Chrome is the default browser,
 `mdfmt` automatically invokes Chrome with the same focused-tab behavior as
 `--chrome`. This is detected directly from the local Launch Services preferences
 using macOS's `plutil`; it does not require `jq` or a cache. The flag remains

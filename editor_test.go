@@ -91,6 +91,53 @@ func TestEditForksCommandWithResolvedMarkdownPath(t *testing.T) {
 	}
 }
 
+func TestEditEndpointRequiresPathTokenAndRedirectsWithinIt(t *testing.T) {
+	const pathToken = "route-token"
+	root := t.TempDir()
+	writeTestFile(t, root, "plans/guide.md", "# Guide\n")
+	server := testServer(t, root)
+	server.pathToken = pathToken
+	var commandLog bytes.Buffer
+	editor := attachTestEditor(t, server, &commandLog, "%s")
+	waitDone := make(chan error, 1)
+	editor.afterWaitForTest = waitDone
+	values := url.Values{
+		"token":  {editor.token},
+		"path":   {"/plans/guide.md"},
+		"return": {"/plans/"},
+	}
+
+	unprefixed := editRequest(t, server, values)
+	if unprefixed.Code != http.StatusNotFound {
+		t.Errorf("unprefixed edit status = %d, want 404", unprefixed.Code)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"http://"+testEditorHost+"/"+pathToken+editEndpoint,
+		strings.NewReader(values.Encode()),
+	)
+	req.Host = testEditorHost
+	req.Header.Set("Origin", "http://"+testEditorHost)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, req)
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body=%s", response.Code, response.Body.String())
+	}
+	if got, want := response.Header().Get("Location"), "/"+pathToken+"/plans/"; got != want {
+		t.Errorf("Location = %q, want %q", got, want)
+	}
+	select {
+	case err := <-waitDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for editor command")
+	}
+}
+
 func TestEditUsesFinalSymlinkTarget(t *testing.T) {
 	root := t.TempDir()
 	realPath := writeTestFile(t, root, "real.markdown", "# Real\n")

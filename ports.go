@@ -20,6 +20,14 @@ type portsFile struct {
 
 type portEntry struct {
 	Port int `json:"port"`
+	// PathToken distinguishes a legacy missing value (nil) from an explicit
+	// unprefixed server (a pointer to the empty string).
+	PathToken *string `json:"path_token,omitempty"`
+}
+
+type managedListener struct {
+	net.Listener
+	pathToken string
 }
 
 func portsFilePath() (string, error) {
@@ -67,6 +75,11 @@ func readPortsFile(filename string) (portsFile, error) {
 				root,
 			)
 		}
+		if entry.PathToken != nil && *entry.PathToken != "" {
+			if err := validatePathTokenOption(*entry.PathToken); err != nil || *entry.PathToken == pathTokenAuto || *entry.PathToken == pathTokenNone {
+				return portsFile{}, fmt.Errorf("port registry %s contains invalid path token for %s", filename, root)
+			}
+		}
 	}
 	return registry, nil
 }
@@ -106,7 +119,7 @@ func writePortsFile(filename string, registry portsFile) error {
 	return nil
 }
 
-func listenForServe(cfg serveConfig, root string) (net.Listener, error) {
+func listenForServe(cfg serveConfig, root string) (*managedListener, error) {
 	filename, err := portsFilePath()
 	if err != nil {
 		return nil, err
@@ -114,7 +127,7 @@ func listenForServe(cfg serveConfig, root string) (net.Listener, error) {
 	return listenWithPortRegistry(cfg, root, filename)
 }
 
-func listenWithPortRegistry(cfg serveConfig, root, filename string) (net.Listener, error) {
+func listenWithPortRegistry(cfg serveConfig, root, filename string) (*managedListener, error) {
 	directory := filepath.Dir(filename)
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, fmt.Errorf("create port registry directory %s: %w", directory, err)
@@ -138,6 +151,10 @@ func listenWithPortRegistry(cfg serveConfig, root, filename string) (net.Listene
 	entry, remembered := registry.Roots[root]
 	if !cfg.portSet && remembered {
 		port = entry.Port
+	}
+	pathToken, err := servePathToken(cfg.pathToken, entry, remembered)
+	if err != nil {
+		return nil, err
 	}
 	listener, selectedPort, err := listenOnRegisteredPort(cfg.bind, port, root, registry)
 	if err != nil {
@@ -170,12 +187,26 @@ func listenWithPortRegistry(cfg serveConfig, root, filename string) (net.Listene
 			delete(registry.Roots, registeredRoot)
 		}
 	}
-	registry.Roots[root] = portEntry{Port: selectedPort}
+	registry.Roots[root] = portEntry{Port: selectedPort, PathToken: tokenPointer(pathToken)}
 	if err := writePortsFile(filename, registry); err != nil {
 		listener.Close()
 		return nil, err
 	}
-	return listener, nil
+	return &managedListener{Listener: listener, pathToken: pathToken}, nil
+}
+
+func servePathToken(option string, entry portEntry, remembered bool) (string, error) {
+	switch option {
+	case pathTokenNone:
+		return "", nil
+	case "", pathTokenAuto:
+		if remembered && entry.PathToken != nil && *entry.PathToken != "" {
+			return *entry.PathToken, nil
+		}
+		return generatePathToken()
+	default:
+		return option, nil
+	}
 }
 
 func listenOnRegisteredPort(bind string, port int, root string, registry portsFile) (net.Listener, int, error) {
