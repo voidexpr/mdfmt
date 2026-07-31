@@ -1,4 +1,4 @@
-module github.com/nicad/mdfmt
+module github.com/voidexpr/mdfmt
 
 go 1.26.5
 

@@ -23,7 +23,7 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 
-	"github.com/nicad/mdfmt/internal/mdhighlight"
+	"github.com/voidexpr/mdfmt/internal/mdhighlight"
 )
 
 const assetPrefix = "/.mdfmt/"

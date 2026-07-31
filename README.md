@@ -11,6 +11,13 @@ without adjacent runtime assets.
 * syntax highlighting of code blocks using Chroma
 * better than text editor preview by providing navigation and table of content
 
+## Screenshots
+
+Click either preview to open the full-size image.
+
+<a href="docs/file.png"><img src="docs/file.png" alt="A Markdown document rendered by mdfmt serve" width="480"></a>
+<a href="docs/docs.png"><img src="docs/docs.png" alt="The mdfmt serve directory browser" width="480"></a>
+
 ### Commands
 #### serve
 * great navigation
@@ -230,3 +237,8 @@ make ci         # full local CI suite
 `make ci` additionally runs staticcheck, checks generated syntax CSS and module
 tidiness, verifies formatting, and runs `govulncheck`. Run `make install` once
 to install the pinned staticcheck and govulncheck versions it uses.
+
+## License
+
+`mdfmt` is available under the permissive [MIT License](LICENSE). Dependency
+attributions are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
