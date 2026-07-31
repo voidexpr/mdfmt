@@ -7,7 +7,12 @@ without adjacent runtime assets.
 
 ## Features
 
-### serve
+* a file explorer for markdown files only
+* syntax highlighting of code blocks using Chroma
+* better than text editor preview by providing navigation and table of content
+
+### Commands
+#### serve
 * great navigation
   * left side: file list
   * center: top breadcrumb and content
@@ -15,12 +20,18 @@ without adjacent runtime assets.
 * optional: edit button to open the file seen from a graphical text editor
   * then write an editor plugin to call 'mdfmt open' to be able to move between the web browser view and your editor
 
+#### open
+* build a URL to a local 'serve' instance and display it in a web browser from any terminal
+
+#### save
+* create a standalone html file from any markdown file
+
 ## Install
 
 `mdfmt` requires Go 1.26.5 or newer.
 
 ```sh
-go install github.com/nicad/mdfmt@latest
+go install github.com/voidexpr/mdfmt@latest
 ```
 
 To build a checkout:
