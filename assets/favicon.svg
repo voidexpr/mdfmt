@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="mdfmt favicon">
+<rect x="16" y="16" width="480" height="480" rx="104" fill="#232c3e"/>
+<path transform="translate(17.59,350.75) scale(0.128906,-0.128906)" fill="#7bd88f" d="M1145 926 350 641 1145 358V109L88 524V760L1145 1176Z"/>
+<path transform="translate(176.53,350.75) scale(0.128906,-0.128906)" fill="#6cb0f0" d="M707 1470 612 1096H815L909 1470H1133L1036 1096H1229V881H983L909 588H1114V373H856L762 0H541L635 373H430L336 0H115L209 373H2V588H262L336 881H117V1096H391L485 1470ZM762 881H557L483 588H688Z"/>
+<path transform="translate(335.47,350.75) scale(0.128906,-0.128906)" fill="#7bd88f" d="M88 926V1176L1145 760V524L88 109V358L883 641Z"/>
+</svg>
