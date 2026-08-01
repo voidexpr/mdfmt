@@ -200,7 +200,7 @@ func renderStandalone(source []byte, filename string, info fs.FileInfo) ([]byte,
 }
 
 func standaloneCSP(stylesheet, script []byte) string {
-	return contentSecurityPolicy(sha256Source(stylesheet), sha256Source(script), "'none'", false)
+	return contentSecurityPolicy(sha256Source(stylesheet), sha256Source(script), "'self' data:", false)
 }
 
 func sha256Source(content []byte) string {

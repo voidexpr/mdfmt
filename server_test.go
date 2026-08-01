@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"log"
@@ -619,9 +620,11 @@ func TestSymlinksStayWithinRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, root, "real.md", "# Real\n")
+	writeTestFile(t, root, "real.png", "image bytes")
 	writeTestFile(t, root, "plain.txt", "non-markdown secret\n")
 	writeTestFile(t, root, ".internal.md", "# Hidden Target\n")
 	writeTestFile(t, sibling, "secret.md", "# Sibling Secret\n")
+	writeTestFile(t, sibling, "secret.png", "sibling image secret")
 	if err := os.Symlink(filepath.Join(root, "real.md"), filepath.Join(root, "inside.md")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
@@ -632,6 +635,15 @@ func TestSymlinksStayWithinRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(root, ".internal.md"), filepath.Join(root, "visible.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "real.png"), filepath.Join(root, "inside.png")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(sibling, "secret.png"), filepath.Join(root, "escape.png")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "plain.txt"), filepath.Join(root, "disguised.png")); err != nil {
 		t.Fatal(err)
 	}
 	server := testServer(t, root)
@@ -655,6 +667,15 @@ func TestSymlinksStayWithinRoot(t *testing.T) {
 	if response := request(t, server, "/visible.md"); response.Code != http.StatusNotFound {
 		t.Errorf("visible alias to hidden target status = %d, want 404", response.Code)
 	}
+	if response := request(t, server, "/inside.png"); response.Code != http.StatusOK {
+		t.Errorf("in-root image symlink status = %d, want 200", response.Code)
+	}
+	if response := request(t, server, "/escape.png"); response.Code != http.StatusForbidden {
+		t.Errorf("escaping image symlink status = %d, want 403", response.Code)
+	}
+	if response := request(t, server, "/disguised.png"); response.Code != http.StatusNotFound {
+		t.Errorf("image alias to non-image target status = %d, want 404", response.Code)
+	}
 }
 
 func TestRawHTMLIsNotEmitted(t *testing.T) {
@@ -669,6 +690,111 @@ func TestRawHTMLIsNotEmitted(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("response contains unsafe/raw marker %q:\n%s", forbidden, body)
 		}
+	}
+}
+
+func TestSafeRawAnchorAndImageHTML(t *testing.T) {
+	root := t.TempDir()
+	imageBytes := []byte("not-a-real-png-but-served-as-opaque-image-bytes")
+	imagePath := filepath.Join(root, "docs", "file.png")
+	if err := os.MkdirAll(filepath.Dir(imagePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(imagePath, imageBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "docs.png"), []byte("directory image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, root, "README.md", `# Screenshots
+
+<a href="./docs/file.png" title="Full image" onclick="bad()"><img src="./docs/file.png" alt="Preview &amp; more" width="480" onerror="bad()"></a>
+<a href="./docs/docs.png"><img src="./docs/docs.png" alt="Directory preview" width="480"></a>
+
+<script>alert(1)</script>
+
+<div>raw layout</div>
+`)
+	writeTestFile(t, root, "docs/notes.txt", "not exposed")
+	writeTestFile(t, root, "docs/unsafe.svg", `<svg onload="bad()"></svg>`)
+
+	server := testServer(t, root)
+	document := request(t, server, "/README.md")
+	if document.Code != http.StatusOK {
+		t.Fatalf("document status = %d; body=%s", document.Code, document.Body.String())
+	}
+	body := document.Body.String()
+	for _, want := range []string{
+		`<a href="./docs/file.png" title="Full image"><img src="./docs/file.png" alt="Preview &amp; more" width="480"></a>`,
+		`<a href="./docs/docs.png"><img src="./docs/docs.png" alt="Directory preview" width="480"></a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("document does not contain sanitized screenshot markup %q:\n%s", want, body)
+		}
+	}
+	for _, forbidden := range []string{"onclick=", "onerror=", "<script>alert(1)</script>", "<div>raw layout</div>", "raw HTML omitted"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("document contains forbidden value %q:\n%s", forbidden, body)
+		}
+	}
+
+	image := request(t, server, "/docs/file.png")
+	if image.Code != http.StatusOK {
+		t.Fatalf("image status = %d; body=%s", image.Code, image.Body.String())
+	}
+	if got := image.Header().Get("Content-Type"); got != "image/png" {
+		t.Errorf("image Content-Type = %q, want image/png", got)
+	}
+	if !bytes.Equal(image.Body.Bytes(), imageBytes) {
+		t.Errorf("image body = %q, want %q", image.Body.Bytes(), imageBytes)
+	}
+
+	directory := request(t, server, "/docs/")
+	if strings.Contains(directory.Body.String(), "file.png") || strings.Contains(directory.Body.String(), "docs.png") {
+		t.Error("image unexpectedly appeared in the Markdown directory listing")
+	}
+	for _, target := range []string{"/docs/notes.txt", "/docs/unsafe.svg"} {
+		if response := request(t, server, target); response.Code != http.StatusNotFound {
+			t.Errorf("%s status = %d, want 404", target, response.Code)
+		}
+	}
+}
+
+func TestSafeRawHTMLUsesTokenFreeRelativeURLs(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "guide.md", "# Root guide\n")
+	writeTestFile(t, root, "plans/nested/page.md", `<a href="/guide.md?view=full#top"><img src="/images/preview.webp" alt="Preview"></a>`)
+	imagePath := filepath.Join(root, "images", "preview.webp")
+	if err := os.MkdirAll(filepath.Dir(imagePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(imagePath, []byte("webp"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := testServer(t, root)
+	server.pathToken = "secret-token"
+	document := request(t, server, "/secret-token/plans/nested/page.md")
+	if document.Code != http.StatusOK {
+		t.Fatalf("document status = %d; body=%s", document.Code, document.Body.String())
+	}
+	body := document.Body.String()
+	for _, want := range []string{
+		`href="../../guide.md?view=full#top"`,
+		`src="../../images/preview.webp"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("document does not contain %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "secret-token") {
+		t.Fatalf("document leaked path token:\n%s", body)
+	}
+	if response := request(t, server, "/images/preview.webp"); response.Code != http.StatusNotFound {
+		t.Errorf("unprefixed image status = %d, want 404", response.Code)
+	}
+	if response := request(t, server, "/secret-token/images/preview.webp"); response.Code != http.StatusOK {
+		t.Errorf("prefixed image status = %d, want 200", response.Code)
 	}
 }
 

@@ -207,9 +207,18 @@ func (s *markdownServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasSuffix(r.URL.Path, "/") ||
 		!info.Mode().IsRegular() ||
-		len(components) == 0 ||
-		!isMarkdownName(components[len(components)-1]) ||
-		!isMarkdownName(info.Name()) {
+		len(components) == 0 {
+		s.writeRouteError(w, r, &routeError{status: http.StatusNotFound, err: errors.New("not found")})
+		return
+	}
+	requestedName := components[len(components)-1]
+	if isImageName(requestedName) && isImageName(info.Name()) {
+		if err := s.serveImage(w, r, resolved, info); err != nil {
+			s.writeRouteError(w, r, err)
+		}
+		return
+	}
+	if !isMarkdownName(requestedName) || !isMarkdownName(info.Name()) {
 		s.writeRouteError(w, r, &routeError{status: http.StatusNotFound, err: errors.New("not found")})
 		return
 	}
@@ -492,6 +501,22 @@ func (s *markdownServer) serveRawMarkdown(w http.ResponseWriter, r *http.Request
 	return nil
 }
 
+func (s *markdownServer) serveImage(w http.ResponseWriter, r *http.Request, filename string, info fs.FileInfo) error {
+	contentType, ok := imageContentType(filename)
+	if !ok {
+		return &routeError{status: http.StatusNotFound, err: errors.New("not found")}
+	}
+	file, err := os.Open(filename)
+	if err != nil {
+		return fileError(err)
+	}
+	defer file.Close()
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, filepath.Base(filename), info.ModTime(), file)
+	return nil
+}
+
 func (s *markdownServer) writePage(w http.ResponseWriter, r *http.Request, data pageData) error {
 	var output bytes.Buffer
 	if err := pageTemplates.ExecuteTemplate(&output, "page.html", data); err != nil {
@@ -509,6 +534,7 @@ func newGoldmark() goldmark.Markdown {
 		goldmark.WithExtensions(
 			extension.GFM,
 			mdhighlight.Extension(),
+			safeRawHTMLExtension{},
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 	)
@@ -552,6 +578,9 @@ func renderMarkdownDocumentWithRootLinks(
 	rendered := renderedDocument{Title: stem(filepath.Base(filename))}
 	headings := make([]*ast.Heading, 0)
 	if err := ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering {
+			annotateSafeRawHTML(node, source, directoryComponents, rewriteRootLinks)
+		}
 		if entering && rewriteRootLinks {
 			switch node := node.(type) {
 			case *ast.Link:
@@ -583,11 +612,9 @@ func renderMarkdownDocumentWithRootLinks(
 	if err := markdown.Renderer().Render(&output, source, document); err != nil {
 		return renderedDocument{}, err
 	}
-	// Goldmark's safe renderer replaces raw HTML with this comment. Removing
-	// the marker keeps user-supplied HTML entirely out of the response.
-	body := bytes.ReplaceAll(output.Bytes(), []byte("<!-- raw HTML omitted -->"), nil)
-	// Goldmark escapes content; unsafe HTML is disabled.
-	rendered.Body = template.HTML(body)
+	// Goldmark escapes Markdown content. The custom raw HTML renderer emits only
+	// normalized, allowlisted anchors and images.
+	rendered.Body = template.HTML(output.Bytes())
 	return rendered, nil
 }
 
@@ -963,6 +990,26 @@ func isMarkdownName(name string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func isImageName(name string) bool {
+	_, ok := imageContentType(name)
+	return ok
+}
+
+func imageContentType(name string) (string, bool) {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".png":
+		return "image/png", true
+	case ".jpg", ".jpeg":
+		return "image/jpeg", true
+	case ".gif":
+		return "image/gif", true
+	case ".webp":
+		return "image/webp", true
+	default:
+		return "", false
 	}
 }
 

@@ -114,17 +114,22 @@ removed. An occupied explicit port produces an error and changes nothing.
 
 The resolved root is the server's filesystem boundary. Directory pages and
 Markdown documents are generated when requested, so refreshing shows edits
-without restarting the server. Non-Markdown files, dotfiles, and
-dot-directories are not exposed. Symlinks are followed only when their fully
-resolved targets remain beneath the root.
+without restarting the server. Non-Markdown files other than directly
+referenced PNG, JPEG, GIF, and WebP images are not exposed. Dotfiles and
+dot-directories remain unavailable. Symlinks are followed only when their
+fully resolved targets remain beneath the root.
 
 Directory navigation, breadcrumbs, heading IDs, a table of contents, sorting,
 responsive light/dark styling, and static assets are self-contained in the
-binary. Unsafe raw HTML in Markdown is omitted. Every document page also has a
-Raw link that serves the exact source bytes as plain text.
+binary. Raw HTML is omitted except for sanitized `<a>` and `<img>` elements;
+scripts, event handlers, and other tags remain blocked. Referenced PNG, JPEG,
+GIF, and WebP images can be viewed but remain absent from directory listings.
+Every document page also has a Raw link that serves the exact source bytes as
+plain text.
 
-When path tokens are enabled, every document, directory, raw-source, asset, and
-editor endpoint requires the prefix. Missing or incorrect tokens return 404.
+When path tokens are enabled, every document, directory, image, raw-source,
+asset, and editor endpoint requires the prefix. Missing or incorrect tokens
+return 404.
 Generated pages use relative internal URLs and never embed the path token in
 their HTML. Root-relative Markdown links such as `/guide.md` are rewritten to
 token-free relative links while serving; ordinary relative and external links

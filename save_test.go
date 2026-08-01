@@ -307,6 +307,38 @@ func TestRunSavePrintsAbsolutePathAndQuietSuppressesIt(t *testing.T) {
 	}
 }
 
+func TestStandaloneSanitizesRawAnchorAndImageHTML(t *testing.T) {
+	root := t.TempDir()
+	filename := writeTestFile(t, root, "README.md", "unused")
+	info, err := os.Stat(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := []byte(`# Screenshots
+
+<a href="./full.png" onclick="bad()"><img src="./preview.png" alt="Preview" width="480" onerror="bad()"></a>
+
+<script>alert(1)</script>
+`)
+	output, err := renderStandalone(source, "README.md", info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := string(output)
+	want := `<a href="./full.png"><img src="./preview.png" alt="Preview" width="480"></a>`
+	if !strings.Contains(document, want) {
+		t.Errorf("standalone output does not contain %q:\n%s", want, document)
+	}
+	for _, forbidden := range []string{"onclick=", "onerror=", "<script>alert(1)</script>", "raw HTML omitted"} {
+		if strings.Contains(document, forbidden) {
+			t.Errorf("standalone output contains forbidden value %q", forbidden)
+		}
+	}
+	if !strings.Contains(document, "img-src &#39;self&#39; data:") {
+		t.Errorf("standalone CSP does not permit local/data images:\n%s", document)
+	}
+}
+
 func textBetween(t *testing.T, document, start, end string) string {
 	t.Helper()
 	startIndex := strings.Index(document, start)
