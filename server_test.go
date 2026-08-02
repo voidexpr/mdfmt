@@ -404,6 +404,8 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 	for _, want := range []string{
 		`href="../../.mdfmt/style.css?v=6"`,
 		`src="../../.mdfmt/app.js?v=5"`,
+		`href="../../.mdfmt/favicon.svg" type="image/svg+xml" sizes="any"`,
+		`href="../../.mdfmt/apple-touch-icon.png" sizes="180x180"`,
 		`href="../../root.md"`,
 		`href="next.md"`,
 		`href="?raw=1"`,
@@ -430,6 +432,10 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 	asset := request(t, server, "/"+token+"/.mdfmt/style.css?v=6")
 	if asset.Code != http.StatusOK {
 		t.Errorf("prefixed asset status = %d", asset.Code)
+	}
+	favicon := request(t, server, "/"+token+"/.mdfmt/favicon.svg")
+	if favicon.Code != http.StatusOK || favicon.Header().Get("Content-Type") != "image/svg+xml" {
+		t.Errorf("prefixed favicon: status=%d content-type=%q", favicon.Code, favicon.Header().Get("Content-Type"))
 	}
 }
 
@@ -834,6 +840,39 @@ func TestEmbeddedAssetsRevalidateAndIncludePersistentSort(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("sorting script does not contain %q", want)
 		}
+	}
+}
+
+func TestEmbeddedFaviconAssets(t *testing.T) {
+	server := testServer(t, t.TempDir())
+	tests := []struct {
+		path        string
+		contentType string
+		content     []byte
+	}{
+		{"favicon.svg", "image/svg+xml", faviconSVGAsset},
+		{"favicon.ico", "image/x-icon", faviconICOAsset},
+		{"favicon-16.png", "image/png", favicon16Asset},
+		{"favicon-32.png", "image/png", favicon32Asset},
+		{"favicon-48.png", "image/png", favicon48Asset},
+		{"apple-touch-icon.png", "image/png", appleTouchIconAsset},
+	}
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			response := request(t, server, "/.mdfmt/"+test.path)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", response.Code)
+			}
+			if got := response.Header().Get("Content-Type"); got != test.contentType {
+				t.Errorf("Content-Type = %q, want %q", got, test.contentType)
+			}
+			if !bytes.Equal(response.Body.Bytes(), test.content) {
+				t.Error("response does not contain the embedded favicon")
+			}
+			if got := response.Header().Get("Cache-Control"); got != "no-cache" {
+				t.Errorf("Cache-Control = %q, want no-cache", got)
+			}
+		})
 	}
 }
 

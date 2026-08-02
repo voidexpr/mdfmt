@@ -228,6 +228,8 @@ func TestStandaloneRenderingPrivacyAndFeatures(t *testing.T) {
 		`http-equiv="Content-Security-Policy"`,
 		`style-src &#39;sha256-`,
 		`script-src &#39;sha256-`,
+		`rel="icon" href="data:image/svg&#43;xml;base64,`,
+		`rel="apple-touch-icon" href="data:image/png;base64,`,
 		`class="layout no-nav"`,
 		`class="toc-top" href="" data-top`,
 		`href="#install"`,

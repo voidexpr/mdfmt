@@ -34,9 +34,15 @@ var embeddedFiles embed.FS
 // The templates and assets are embedded at build time, so both commands share a
 // single parsed template set and one copy of each asset.
 var (
-	pageTemplates   = template.Must(template.New("mdfmt").ParseFS(embeddedFiles, "templates/*.html"))
-	stylesheetAsset = joinAssets("assets/style.css", "assets/syntax.css")
-	scriptAsset     = mustReadAsset("assets/app.js")
+	pageTemplates       = template.Must(template.New("mdfmt").ParseFS(embeddedFiles, "templates/*.html"))
+	stylesheetAsset     = joinAssets("assets/style.css", "assets/syntax.css")
+	scriptAsset         = mustReadAsset("assets/app.js")
+	faviconSVGAsset     = mustReadAsset("assets/favicon.svg")
+	faviconICOAsset     = mustReadAsset("assets/favicon.ico")
+	favicon16Asset      = mustReadAsset("assets/favicon-16.png")
+	favicon32Asset      = mustReadAsset("assets/favicon-32.png")
+	favicon48Asset      = mustReadAsset("assets/favicon-48.png")
+	appleTouchIconAsset = mustReadAsset("assets/apple-touch-icon.png")
 )
 
 func mustReadAsset(name string) []byte {
@@ -89,6 +95,12 @@ type pageData struct {
 	RawURL        template.URL
 	StylesheetURL template.URL
 	ScriptURL     template.URL
+	FaviconSVGURL template.URL
+	FaviconICOURL template.URL
+	Favicon16URL  template.URL
+	Favicon32URL  template.URL
+	Favicon48URL  template.URL
+	AppleIconURL  template.URL
 }
 
 type breadcrumb struct {
@@ -308,6 +320,18 @@ func (s *markdownServer) serveAsset(w http.ResponseWriter, r *http.Request) {
 		content, contentType = stylesheetAsset, "text/css; charset=utf-8"
 	case assetPrefix + "app.js":
 		content, contentType = scriptAsset, "text/javascript; charset=utf-8"
+	case assetPrefix + "favicon.svg":
+		content, contentType = faviconSVGAsset, "image/svg+xml"
+	case assetPrefix + "favicon.ico":
+		content, contentType = faviconICOAsset, "image/x-icon"
+	case assetPrefix + "favicon-16.png":
+		content, contentType = favicon16Asset, "image/png"
+	case assetPrefix + "favicon-32.png":
+		content, contentType = favicon32Asset, "image/png"
+	case assetPrefix + "favicon-48.png":
+		content, contentType = favicon48Asset, "image/png"
+	case assetPrefix + "apple-touch-icon.png":
+		content, contentType = appleTouchIconAsset, "image/png"
 	default:
 		http.NotFound(w, r)
 		return
@@ -426,17 +450,16 @@ func (s *markdownServer) serveDirectory(w http.ResponseWriter, r *http.Request, 
 		name = components[len(components)-1]
 	}
 	data := pageData{
-		Title:         name,
-		Directory:     name,
-		Breadcrumbs:   s.breadcrumbsFor(components, nil),
-		Parent:        s.parentEntry(components),
-		Directories:   directories,
-		Files:         files,
-		ShowTitle:     true,
-		CanEdit:       s.editor != nil,
-		StylesheetURL: template.URL(s.pageURL(components, []string{".mdfmt", "style.css"}, false) + "?v=6"),
-		ScriptURL:     template.URL(s.pageURL(components, []string{".mdfmt", "app.js"}, false) + "?v=5"),
+		Title:       name,
+		Directory:   name,
+		Breadcrumbs: s.breadcrumbsFor(components, nil),
+		Parent:      s.parentEntry(components),
+		Directories: directories,
+		Files:       files,
+		ShowTitle:   true,
+		CanEdit:     s.editor != nil,
 	}
+	s.setPageAssetURLs(&data, components)
 	return s.writePage(w, r, data)
 }
 
@@ -473,21 +496,34 @@ func (s *markdownServer) serveMarkdown(w http.ResponseWriter, r *http.Request, f
 			Name: components[len(components)-1],
 			Meta: fileBreadcrumbMeta(info, time.Now()),
 		}),
-		Parent:        s.parentEntry(directoryComponents),
-		Directories:   directories,
-		Files:         files,
-		Body:          rendered.Body,
-		TOC:           rendered.TOC,
-		TopURL:        template.URL(s.pageURL(directoryComponents, components, false)),
-		IsDocument:    true,
-		ShowTitle:     !rendered.HasH1,
-		CanEdit:       s.editor != nil,
-		Edit:          s.editAction(components, directoryComponents, components, false),
-		RawURL:        template.URL(rawURL),
-		StylesheetURL: template.URL(s.pageURL(directoryComponents, []string{".mdfmt", "style.css"}, false) + "?v=6"),
-		ScriptURL:     template.URL(s.pageURL(directoryComponents, []string{".mdfmt", "app.js"}, false) + "?v=5"),
+		Parent:      s.parentEntry(directoryComponents),
+		Directories: directories,
+		Files:       files,
+		Body:        rendered.Body,
+		TOC:         rendered.TOC,
+		TopURL:      template.URL(s.pageURL(directoryComponents, components, false)),
+		IsDocument:  true,
+		ShowTitle:   !rendered.HasH1,
+		CanEdit:     s.editor != nil,
+		Edit:        s.editAction(components, directoryComponents, components, false),
+		RawURL:      template.URL(rawURL),
 	}
+	s.setPageAssetURLs(&data, directoryComponents)
 	return s.writePage(w, r, data)
+}
+
+func (s *markdownServer) setPageAssetURLs(data *pageData, baseDirectory []string) {
+	assetURL := func(name string) template.URL {
+		return template.URL(s.pageURL(baseDirectory, []string{".mdfmt", name}, false))
+	}
+	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=6")
+	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=5")
+	data.FaviconSVGURL = assetURL("favicon.svg")
+	data.FaviconICOURL = assetURL("favicon.ico")
+	data.Favicon16URL = assetURL("favicon-16.png")
+	data.Favicon32URL = assetURL("favicon-32.png")
+	data.Favicon48URL = assetURL("favicon-48.png")
+	data.AppleIconURL = assetURL("apple-touch-icon.png")
 }
 
 func (s *markdownServer) serveRawMarkdown(w http.ResponseWriter, r *http.Request, filename string, info fs.FileInfo) error {

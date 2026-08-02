@@ -178,7 +178,13 @@ func renderStandalone(source []byte, filename string, info fs.FileInfo) ([]byte,
 	}
 	data := standalonePageData{
 		pageData: pageData{
-			Title: rendered.Title,
+			Title:         rendered.Title,
+			FaviconSVGURL: embeddedAssetDataURL("image/svg+xml", faviconSVGAsset),
+			FaviconICOURL: embeddedAssetDataURL("image/x-icon", faviconICOAsset),
+			Favicon16URL:  embeddedAssetDataURL("image/png", favicon16Asset),
+			Favicon32URL:  embeddedAssetDataURL("image/png", favicon32Asset),
+			Favicon48URL:  embeddedAssetDataURL("image/png", favicon48Asset),
+			AppleIconURL:  embeddedAssetDataURL("image/png", appleTouchIconAsset),
 			Breadcrumbs: []breadcrumb{{
 				Name: filename,
 				Meta: fileBreadcrumbMeta(info, time.Now()),
@@ -197,6 +203,10 @@ func renderStandalone(source []byte, filename string, info fs.FileInfo) ([]byte,
 		return nil, fmt.Errorf("execute standalone template: %w", err)
 	}
 	return output.Bytes(), nil
+}
+
+func embeddedAssetDataURL(contentType string, content []byte) template.URL {
+	return template.URL("data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(content))
 }
 
 func standaloneCSP(stylesheet, script []byte) string {

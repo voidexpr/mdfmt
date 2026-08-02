@@ -1,5 +1,7 @@
 # mdfmt
 
+<img src="assets/apple-touch-icon.png" alt="mdfmt icon" width="112">
+
 `mdfmt` turns Markdown into a polished local documentation site or a
 self-contained HTML file. It is a single Go binary with embedded templates,
 styles, JavaScript, and syntax-highlighting definitions, so it works offline

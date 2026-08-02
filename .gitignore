@@ -2,4 +2,5 @@
 /cover.out
 /.gocache/
 *.html
+!templates/*.html
 .ateam

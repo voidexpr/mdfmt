@@ -1,0 +1,133 @@
+{{define "toc"}}
+<ul>
+  {{range .}}
+  <li>
+    <a href="#{{.ID}}" data-heading="{{.ID}}">{{.Title}}</a>
+    {{if .Children}}{{template "toc" .Children}}{{end}}
+  </li>
+  {{end}}
+</ul>
+{{end}}
+{{define "favicons"}}
+  <link rel="icon" href="{{.FaviconSVGURL}}" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="{{.Favicon48URL}}" type="image/png" sizes="48x48">
+  <link rel="icon" href="{{.Favicon32URL}}" type="image/png" sizes="32x32">
+  <link rel="icon" href="{{.Favicon16URL}}" type="image/png" sizes="16x16">
+  <link rel="shortcut icon" href="{{.FaviconICOURL}}">
+  <link rel="apple-touch-icon" href="{{.AppleIconURL}}" sizes="180x180">
+{{end}}
+{{define "edit-form"}}
+      <form class="edit-form" method="post" action="{{.Action}}">
+        <input type="hidden" name="token" value="{{.Token}}">
+        <input type="hidden" name="path" value="{{.Path}}">
+        <input type="hidden" name="return" value="{{.ReturnURL}}">
+        <button class="edit-button" type="submit" aria-label="Edit {{.Label}}" title="Edit {{.Label}}">Edit</button>
+      </form>
+{{end}}
+{{define "main"}}
+    <main class="{{if .IsDocument}}document-main{{else}}directory-main{{end}}">
+      <div class="page-toolbar">
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+          {{range $index, $crumb := .Breadcrumbs}}{{if $index}}<span aria-hidden="true">/</span>{{end}}{{if $crumb.URL}}<a href="{{$crumb.URL}}">{{$crumb.Name}}</a>{{else}}<span aria-current="page">{{$crumb.Name}}{{with $crumb.Meta}} <span class="breadcrumb-meta">({{.}})</span>{{end}}</span>{{end}}{{end}}
+        </nav>
+        {{if or .RawURL .Edit}}
+        <div class="page-actions">
+          {{with .RawURL}}<a class="raw-link" href="{{.}}" aria-label="View raw Markdown" title="View raw Markdown">Raw</a>{{end}}
+          {{with .Edit}}{{template "edit-form" .}}{{end}}
+        </div>
+        {{end}}
+      </div>
+      <article>
+        {{if .ShowTitle}}<h1 class="page-title">{{.Title}}</h1>{{end}}
+        {{if .IsDocument}}
+          <div class="markdown">{{.Body}}</div>
+        {{else}}
+          <div class="directory-view">
+            {{if .Directories}}
+            <div class="folder-list">
+              {{range .Directories}}<a class="folder-entry" href="{{.URL}}"><span aria-hidden="true">▸</span><span>{{.Title}}/</span></a>{{end}}
+            </div>
+            {{end}}
+            {{if .Files}}
+            <div class="directory-table-wrap">
+              <table class="directory-table{{if .CanEdit}} can-edit{{end}}" data-sortable>
+                <colgroup>
+                  <col class="col-filename">
+                  <col class="col-modified">
+                  <col class="col-ago">
+                  <col class="col-size">
+                  <col class="col-title">
+                  {{if .CanEdit}}<col class="col-edit">{{end}}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th scope="col" aria-sort="ascending"><button type="button" data-sort-key="name">Filename</button></th>
+                    <th scope="col"><button type="button" data-sort-key="modified">Last modified</button></th>
+                    <th scope="col">Ago</th>
+                    <th scope="col"><button type="button" data-sort-key="size">Size</button></th>
+                    <th scope="col">Title</th>
+                    {{if .CanEdit}}<th class="edit-heading" scope="col">Action</th>{{end}}
+                  </tr>
+                </thead>
+                <tbody>
+                  {{range .Files}}
+                  <tr data-name="{{.Name}}" data-modified="{{.SortModified}}" data-size="{{.SortSize}}">
+                    <td class="filename"><a href="{{.URL}}">{{.Name}}</a></td>
+                    <td class="modified"><time datetime="{{.ModifiedFull}}">{{.Modified}}</time></td>
+                    <td class="ago">{{.Ago}}</td>
+                    <td class="size">{{.Size}}</td>
+                    <td class="document-title">{{.Title}}</td>
+                    {{with .Edit}}<td class="edit-action">{{template "edit-form" .}}</td>{{end}}
+                  </tr>
+                  {{end}}
+                </tbody>
+              </table>
+            </div>
+            {{end}}
+            {{if and (not .Directories) (not .Files)}}<p class="empty">No Markdown files or directories here.</p>{{end}}
+          </div>
+        {{end}}
+      </article>
+    </main>
+{{end}}
+
+{{define "toc-sidebar"}}
+    {{if .TOC}}
+    <aside class="right-sidebar" aria-label="On this page">
+      <div class="sidebar-heading">
+        <div class="sidebar-title">On this page</div>
+        <a class="toc-top" href="{{.TopURL}}" data-top>top</a>
+      </div>
+      <nav class="toc">{{template "toc" .TOC}}</nav>
+    </aside>
+    {{end}}
+{{end}}
+
+{{define "page.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+{{template "favicons" .}}
+  <title>{{.Title}} · mdfmt</title>
+  <link rel="stylesheet" href="{{.StylesheetURL}}">
+  <script src="{{.ScriptURL}}" defer></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="left-sidebar" aria-label="Directory navigation">
+      <div class="sidebar-title">{{.Directory}}</div>
+      <nav>
+        {{with .Parent}}<a class="nav-entry parent" href="{{.URL}}">← {{.Title}}</a>{{end}}
+        {{range .Directories}}<a class="nav-entry directory" href="{{.URL}}">{{.Title}}/</a>{{end}}
+        {{range .Files}}<a class="nav-entry{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}
+      </nav>
+    </aside>
+
+{{template "main" .}}
+{{template "toc-sidebar" .}}
+  </div>
+</body>
+</html>
+{{end}}
