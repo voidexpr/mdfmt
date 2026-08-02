@@ -37,6 +37,16 @@ type saveConfig struct {
 	quiet  bool
 }
 
+type buildConfig struct {
+	source           string
+	mounts           []string
+	output           string
+	pathToken        string
+	strict           bool
+	strictNoDirIndex bool
+	quiet            bool
+}
+
 func newFlagSet(name string, output io.Writer, usage string, description ...string) *pflag.FlagSet {
 	flags := pflag.NewFlagSet(name, pflag.ContinueOnError)
 	flags.SetOutput(output)
@@ -130,6 +140,42 @@ func parseSaveFlags(args []string, output io.Writer) (saveConfig, error) {
 	return cfg, nil
 }
 
+func parseBuildFlags(args []string, output io.Writer) (buildConfig, error) {
+	cfg := buildConfig{pathToken: pathTokenNone}
+	flags := newFlagSet("mdfmt build", output,
+		"Usage: mdfmt build SOURCE_DIR -o TARGET_DIR [options]\n       mdfmt build --mount MOUNT=SOURCE_DIR [--mount ...] -o TARGET_DIR [options]",
+		"Build one or more Markdown directory trees as a static site.")
+	flags.StringArrayVar(&cfg.mounts, "mount", nil, "mount mapping MOUNT_PATH=SOURCE_DIR (repeatable)")
+	flags.StringVarP(&cfg.output, "output", "o", "", "owned output directory (required)")
+	flags.StringVar(&cfg.pathToken, "path-token", pathTokenNone, "URL path token: auto, none, or a custom value")
+	flags.BoolVar(&cfg.strict, "strict", false, "treat build warnings as errors")
+	flags.BoolVar(&cfg.strictNoDirIndex, "strict-no-dir-index", false, "require index.md in every source directory")
+	flags.BoolVarP(&cfg.quiet, "quiet", "q", false, "do not print the generated site path")
+	if err := flags.Parse(args); err != nil {
+		return buildConfig{}, err
+	}
+	if cfg.output == "" {
+		flags.Usage()
+		return buildConfig{}, errors.New("--output is required")
+	}
+	if len(cfg.mounts) > 0 {
+		if flags.NArg() != 0 {
+			flags.Usage()
+			return buildConfig{}, errors.New("a positional SOURCE_DIR cannot be combined with --mount")
+		}
+	} else {
+		if flags.NArg() != 1 {
+			flags.Usage()
+			return buildConfig{}, errors.New("expected exactly one SOURCE_DIR or at least one --mount")
+		}
+		cfg.source = flags.Arg(0)
+	}
+	if err := validatePathTokenOption(cfg.pathToken); err != nil {
+		return buildConfig{}, err
+	}
+	return cfg, nil
+}
+
 func printRootUsage(output io.Writer) {
 	fmt.Fprintln(output, "Usage: mdfmt <command> [options]")
 	fmt.Fprintln(output)
@@ -138,6 +184,7 @@ func printRootUsage(output io.Writer) {
 	fmt.Fprintln(output, "  open    Open served Markdown files and directories")
 	fmt.Fprintln(output, "  config  Show remembered roots, ports, and listening PIDs")
 	fmt.Fprintln(output, "  save    Render one source file as standalone HTML")
+	fmt.Fprintln(output, "  build   Build Markdown directories as a static site")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Run \"mdfmt <command> --help\" for command-specific help.")
 }
@@ -175,10 +222,27 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		return runSave(cfg, stdout)
+	case "build":
+		cfg, err := parseBuildFlags(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return runBuild(cfg, stdout, stderr)
 	default:
 		printRootUsage(stderr)
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func runBuild(cfg buildConfig, stdout, stderr io.Writer) error {
+	outputPath, err := buildStaticSite(cfg, stderr)
+	if err != nil {
+		return err
+	}
+	if !cfg.quiet {
+		fmt.Fprintln(stdout, outputPath)
+	}
+	return nil
 }
 
 func runSave(cfg saveConfig, stdout io.Writer) error {

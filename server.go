@@ -101,12 +101,18 @@ type pageData struct {
 	Favicon32URL  template.URL
 	Favicon48URL  template.URL
 	AppleIconURL  template.URL
+	Projects      []navEntry
+	StaticCSP     string
 }
 
 type breadcrumb struct {
-	Name string
-	URL  template.URL
-	Meta string
+	Name         string
+	URL          template.URL
+	Meta         string
+	ModifiedFull string
+	Modified     string
+	Ago          string
+	Size         string
 }
 
 type navEntry struct {
@@ -232,6 +238,10 @@ func (s *markdownServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isMarkdownName(requestedName) || !isMarkdownName(info.Name()) {
 		s.writeRouteError(w, r, &routeError{status: http.StatusNotFound, err: errors.New("not found")})
+		return
+	}
+	if strings.EqualFold(requestedName, "index.md") {
+		http.Redirect(w, r, servedURL(s.pathToken, components[:len(components)-1], true), http.StatusMovedPermanently)
 		return
 	}
 	if r.URL.Query().Get("raw") == "1" {
@@ -441,6 +451,13 @@ func fileError(err error) error {
 }
 
 func (s *markdownServer) serveDirectory(w http.ResponseWriter, r *http.Request, directory string, components []string) error {
+	indexPath, indexInfo, indexName, err := s.directoryIndex(directory, components)
+	if err != nil {
+		return err
+	}
+	if indexPath != "" {
+		return s.serveMarkdownPage(w, r, indexPath, indexInfo, appendComponents(components, indexName), true)
+	}
 	directories, files, err := s.listDirectory(directory, components, "", true)
 	if err != nil {
 		return err
@@ -464,6 +481,10 @@ func (s *markdownServer) serveDirectory(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *markdownServer) serveMarkdown(w http.ResponseWriter, r *http.Request, filename string, info fs.FileInfo, components []string) error {
+	return s.serveMarkdownPage(w, r, filename, info, components, false)
+}
+
+func (s *markdownServer) serveMarkdownPage(w http.ResponseWriter, r *http.Request, filename string, info fs.FileInfo, components []string, landing bool) error {
 	source, err := os.ReadFile(filename)
 	if err != nil {
 		return fileError(err)
@@ -485,17 +506,31 @@ func (s *markdownServer) serveMarkdown(w http.ResponseWriter, r *http.Request, f
 	if err != nil {
 		return err
 	}
+	if landing {
+		filtered := files[:0]
+		for _, file := range files {
+			if !strings.EqualFold(file.Name, "index.md") {
+				filtered = append(filtered, file)
+			}
+		}
+		files = filtered
+	}
 	rawURL := s.pageURL(directoryComponents, components, false) + "?raw=1"
 	if s.pathToken != "" {
 		rawURL = "?raw=1"
 	}
+	documentCrumb := &breadcrumb{
+		Name: components[len(components)-1],
+		Meta: fileBreadcrumbMeta(info, time.Now()),
+	}
+	if landing {
+		documentCrumb = nil
+		rawURL = ""
+	}
 	data := pageData{
-		Title:     rendered.Title,
-		Directory: directoryName(s.root, directoryComponents),
-		Breadcrumbs: s.breadcrumbsFor(directoryComponents, &breadcrumb{
-			Name: components[len(components)-1],
-			Meta: fileBreadcrumbMeta(info, time.Now()),
-		}),
+		Title:       rendered.Title,
+		Directory:   directoryName(s.root, directoryComponents),
+		Breadcrumbs: s.breadcrumbsFor(directoryComponents, documentCrumb),
 		Parent:      s.parentEntry(directoryComponents),
 		Directories: directories,
 		Files:       files,
@@ -508,16 +543,47 @@ func (s *markdownServer) serveMarkdown(w http.ResponseWriter, r *http.Request, f
 		Edit:        s.editAction(components, directoryComponents, components, false),
 		RawURL:      template.URL(rawURL),
 	}
+	if landing {
+		data.TopURL = template.URL(s.pageURL(directoryComponents, directoryComponents, true))
+		data.Edit = s.editAction(components, directoryComponents, directoryComponents, true)
+	}
 	s.setPageAssetURLs(&data, directoryComponents)
 	return s.writePage(w, r, data)
+}
+
+func (s *markdownServer) directoryIndex(directory string, components []string) (string, fs.FileInfo, string, error) {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return "", nil, "", fileError(err)
+	}
+	var candidates []string
+	for _, entry := range entries {
+		if strings.EqualFold(entry.Name(), "index.md") {
+			candidates = append(candidates, entry.Name())
+		}
+	}
+	if len(candidates) == 0 {
+		return "", nil, "", nil
+	}
+	if len(candidates) > 1 {
+		return "", nil, "", &routeError{status: http.StatusInternalServerError, err: errors.New("multiple case variants of index.md")}
+	}
+	resolved, info, err := s.resolve(appendComponents(components, candidates[0]))
+	if err != nil {
+		return "", nil, "", err
+	}
+	if !info.Mode().IsRegular() || !isMarkdownName(info.Name()) {
+		return "", nil, "", &routeError{status: http.StatusInternalServerError, err: errors.New("index.md is not a readable Markdown file")}
+	}
+	return resolved, info, candidates[0], nil
 }
 
 func (s *markdownServer) setPageAssetURLs(data *pageData, baseDirectory []string) {
 	assetURL := func(name string) template.URL {
 		return template.URL(s.pageURL(baseDirectory, []string{".mdfmt", name}, false))
 	}
-	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=6")
-	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=5")
+	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=7")
+	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=6")
 	data.FaviconSVGURL = assetURL("favicon.svg")
 	data.FaviconICOURL = assetURL("favicon.ico")
 	data.Favicon16URL = assetURL("favicon-16.png")
@@ -610,19 +676,36 @@ func renderMarkdownDocumentWithRootLinks(
 	directoryComponents []string,
 	rewriteRootLinks bool,
 ) (renderedDocument, error) {
+	var rewriter markdownDestinationRewriter
+	if rewriteRootLinks {
+		rewriter = func(destination []byte, _ bool) []byte {
+			return rewriteRootRelativeDestination(destination, directoryComponents)
+		}
+	}
+	return renderMarkdownDocumentWithDestinationRewriter(markdown, source, filename, rewriter)
+}
+
+type markdownDestinationRewriter func(destination []byte, image bool) []byte
+
+func renderMarkdownDocumentWithDestinationRewriter(
+	markdown goldmark.Markdown,
+	source []byte,
+	filename string,
+	rewriter markdownDestinationRewriter,
+) (renderedDocument, error) {
 	document := markdown.Parser().Parse(text.NewReader(source))
 	rendered := renderedDocument{Title: stem(filepath.Base(filename))}
 	headings := make([]*ast.Heading, 0)
 	if err := ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if entering {
-			annotateSafeRawHTML(node, source, directoryComponents, rewriteRootLinks)
+			annotateSafeRawHTMLWithRewriter(node, source, rewriter)
 		}
-		if entering && rewriteRootLinks {
+		if entering && rewriter != nil {
 			switch node := node.(type) {
 			case *ast.Link:
-				node.Destination = rewriteRootRelativeDestination(node.Destination, directoryComponents)
+				node.Destination = rewriter(node.Destination, false)
 			case *ast.Image:
-				node.Destination = rewriteRootRelativeDestination(node.Destination, directoryComponents)
+				node.Destination = rewriter(node.Destination, true)
 			}
 		}
 		heading, ok := node.(*ast.Heading)

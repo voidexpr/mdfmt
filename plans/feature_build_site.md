@@ -326,6 +326,12 @@ must work:
 - inside a timestamped or opaque deployment directory;
 - when opened directly from the filesystem where browser behavior permits.
 
+Static links to directory pages name their generated `index.html` explicitly
+instead of ending at the directory slash. Browsers commonly show a raw
+filesystem listing for a `file://.../directory/` URL rather than loading its
+index file; explicit links preserve local navigation and remain valid on an
+ordinary web server.
+
 URL components use escaped filesystem names, not invented slugs.
 
 ## `index.md` directory landing pages

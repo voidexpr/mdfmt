@@ -28,7 +28,7 @@
     <main class="{{if .IsDocument}}document-main{{else}}directory-main{{end}}">
       <div class="page-toolbar">
         <nav class="breadcrumbs" aria-label="Breadcrumb">
-          {{range $index, $crumb := .Breadcrumbs}}{{if $index}}<span aria-hidden="true">/</span>{{end}}{{if $crumb.URL}}<a href="{{$crumb.URL}}">{{$crumb.Name}}</a>{{else}}<span aria-current="page">{{$crumb.Name}}{{with $crumb.Meta}} <span class="breadcrumb-meta">({{.}})</span>{{end}}</span>{{end}}{{end}}
+          {{range $index, $crumb := .Breadcrumbs}}{{if $index}}<span aria-hidden="true">/</span>{{end}}{{if $crumb.URL}}<a href="{{$crumb.URL}}">{{$crumb.Name}}</a>{{else}}<span aria-current="page">{{$crumb.Name}}{{if $crumb.ModifiedFull}} <span class="breadcrumb-meta">(<time datetime="{{$crumb.ModifiedFull}}" data-relative-time data-relative-style="compact">{{$crumb.Ago}}</time>, {{$crumb.Modified}}, {{$crumb.Size}})</span>{{else}}{{with $crumb.Meta}} <span class="breadcrumb-meta">({{.}})</span>{{end}}{{end}}</span>{{end}}{{end}}
         </nav>
         {{if or .RawURL .Edit}}
         <div class="page-actions">
@@ -74,7 +74,7 @@
                   <tr data-name="{{.Name}}" data-modified="{{.SortModified}}" data-size="{{.SortSize}}">
                     <td class="filename"><a href="{{.URL}}">{{.Name}}</a></td>
                     <td class="modified"><time datetime="{{.ModifiedFull}}">{{.Modified}}</time></td>
-                    <td class="ago">{{.Ago}}</td>
+                    <td class="ago"><time datetime="{{.ModifiedFull}}" data-relative-time>{{.Ago}}</time></td>
                     <td class="size">{{.Size}}</td>
                     <td class="document-title">{{.Title}}</td>
                     {{with .Edit}}<td class="edit-action">{{template "edit-form" .}}</td>{{end}}
@@ -109,6 +109,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {{with .StaticCSP}}<meta http-equiv="Content-Security-Policy" content="{{.}}">
+  <meta name="referrer" content="no-referrer">{{end}}
 {{template "favicons" .}}
   <title>{{.Title}} · mdfmt</title>
   <link rel="stylesheet" href="{{.StylesheetURL}}">
@@ -117,6 +119,12 @@
 <body>
   <div class="layout">
     <aside class="left-sidebar" aria-label="Directory navigation">
+      {{if .Projects}}
+      <div class="sidebar-title">Projects</div>
+      <nav class="project-navigation">
+        {{range .Projects}}<a class="nav-entry directory{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="true"{{end}}>{{.Title}}/</a>{{end}}
+      </nav>
+      {{end}}
       <div class="sidebar-title">{{.Directory}}</div>
       <nav>
         {{with .Parent}}<a class="nav-entry parent" href="{{.URL}}">← {{.Title}}</a>{{end}}

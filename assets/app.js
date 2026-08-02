@@ -1,4 +1,41 @@
 (() => {
+  const relativeAge = (timestamp, compact) => {
+    const then = new Date(timestamp);
+    if (Number.isNaN(then.getTime())) return null;
+    const elapsed = Math.max(0, Date.now() - then.getTime());
+    const units = [
+      [365 * 24 * 60 * 60 * 1000, "year", "y"],
+      [30 * 24 * 60 * 60 * 1000, "month", "mo"],
+      [7 * 24 * 60 * 60 * 1000, "week", "w"],
+      [24 * 60 * 60 * 1000, "day", "d"],
+      [60 * 60 * 1000, "hour", "h"],
+      [60 * 1000, "minute", "m"],
+    ];
+    for (const [milliseconds, name, abbreviation] of units) {
+      if (elapsed >= milliseconds) {
+        const value = Math.floor(elapsed / milliseconds);
+        return compact
+          ? `${value}${abbreviation} ago`
+          : `${value} ${name}${value === 1 ? "" : "s"} ago`;
+      }
+    }
+    return "just now";
+  };
+
+  const updateRelativeTimes = () => {
+    for (const element of document.querySelectorAll("time[data-relative-time]")) {
+      const value = relativeAge(
+        element.dateTime,
+        element.dataset.relativeStyle === "compact",
+      );
+      if (value) element.textContent = value;
+    }
+  };
+  updateRelativeTimes();
+  if (document.querySelector("time[data-relative-time]")) {
+    setInterval(updateRelativeTimes, 60 * 1000);
+  }
+
   const topLink = document.querySelector("[data-top]");
   if (topLink) {
     topLink.addEventListener("click", (event) => {

@@ -35,6 +35,9 @@ Click either preview to open the full-size image.
 #### save
 * create a standalone html file from any markdown file
 
+#### build
+* materialize one or more Markdown trees as a deployable static site
+
 ## Install
 
 `mdfmt` requires Go 1.26.5 or newer.
@@ -57,11 +60,13 @@ mdfmt serve [OPTIONS] [PATH]
 mdfmt open PATH... [OPTIONS]
 mdfmt config
 mdfmt save [OPTIONS] SOURCE
+mdfmt build SOURCE_DIR -o TARGET_DIR [OPTIONS]
+mdfmt build --mount MOUNT=SOURCE_DIR [--mount ...] -o TARGET_DIR [OPTIONS]
 ```
 
 Options may appear before or after the positional path. Run `mdfmt --help`,
-`mdfmt serve --help`, `mdfmt open --help`, or `mdfmt save --help` for the
-built-in command reference.
+`mdfmt serve --help`, `mdfmt open --help`, `mdfmt save --help`, or
+`mdfmt build --help` for the built-in command reference.
 
 ### Serve a Markdown tree
 
@@ -236,6 +241,52 @@ be the target.
 
 The saved file embeds its CSS and JavaScript, contains no source directory
 path, starts no server, and needs no adjacent assets.
+
+### Build a static site
+
+```sh
+mdfmt build ./docs --output ./public
+
+mdfmt build \
+  --mount project-a="$HOME/projects/a" \
+  --mount project-b="$HOME/projects/b" \
+  --mount research="$HOME/projects/c/research" \
+  --output ./public \
+  --path-token auto
+```
+
+`build` recursively materializes directory pages, Markdown documents, shared
+CSS and JavaScript, favicons, and referenced local images. Markdown routes use
+`.html`; an `index.md` becomes its directory landing page. Local Markdown and
+image links are rewritten to the generated routes, while external links stay
+unchanged. Generated directory links name `index.html` explicitly so navigation
+also works when the site is opened directly through a browser's `file://` URL.
+
+Repeated `--mount URL_PATH=SOURCE_DIR` options combine disjoint source trees
+under a generated Projects page. Each mount remains its own filesystem
+boundary, and every page includes project navigation. Leading `/` in an
+authored local link means the current mount's root.
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `-o`, `--output TARGET_DIR` | required | Write the complete owned staging tree here. |
+| `--mount MOUNT=SOURCE_DIR` | none | Add an explicitly named source tree. Repeatable and mutually exclusive with the positional source form. |
+| `--path-token VALUE` | `none` | Use `auto` for a fresh random URL prefix, `none` for no prefix, or a custom stable value. |
+| `--strict` | disabled | Treat broken links, missing images, route collisions, and other warnings as build errors. |
+| `--strict-no-dir-index` | disabled | Require every source directory to contain `index.md`. |
+| `-q`, `--quiet` | disabled | Do not print the generated site root. |
+
+Generation completes in a private temporary directory before the target is
+modified. A missing or empty target can be claimed; after that, the `.mdfmt`
+marker records ownership. `build` refuses to replace a non-empty unmarked
+directory and rejects source/output overlap. A successful rebuild replaces the
+entire previous site, including removed mounts and old automatic tokens.
+
+With `--path-token auto`, publish `TARGET_DIR` itself as the web-server root and
+open the printed `TARGET_DIR/TOKEN` path. All generated links are relative, so
+the token is absent from page source and works for nested pages. Disable web
+server directory listings. The opaque path is a secret-link convenience, not
+authentication; use access control when disclosure matters.
 
 ## Syntax highlighting
 

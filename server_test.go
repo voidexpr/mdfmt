@@ -402,8 +402,8 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 		t.Fatalf("document HTML leaked the path token:\n%s", body)
 	}
 	for _, want := range []string{
-		`href="../../.mdfmt/style.css?v=6"`,
-		`src="../../.mdfmt/app.js?v=5"`,
+		`href="../../.mdfmt/style.css?v=7"`,
+		`src="../../.mdfmt/app.js?v=6"`,
 		`href="../../.mdfmt/favicon.svg" type="image/svg+xml" sizes="any"`,
 		`href="../../.mdfmt/apple-touch-icon.png" sizes="180x180"`,
 		`href="../../root.md"`,
@@ -429,7 +429,7 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 	if raw.Code != http.StatusOK || !strings.Contains(raw.Body.String(), "[Root](/root.md)") {
 		t.Errorf("prefixed raw response: status=%d body=%s", raw.Code, raw.Body.String())
 	}
-	asset := request(t, server, "/"+token+"/.mdfmt/style.css?v=6")
+	asset := request(t, server, "/"+token+"/.mdfmt/style.css?v=7")
 	if asset.Code != http.StatusOK {
 		t.Errorf("prefixed asset status = %d", asset.Code)
 	}
@@ -517,6 +517,32 @@ func TestFileAndDirectoryRouting(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestIndexMarkdownIsDirectoryLandingPage(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "plans"), "index.md", "# Project Plans\n\n## Next\n")
+	writeTestFile(t, filepath.Join(root, "plans"), "other.md", "# Other\n")
+	server := testServer(t, root)
+
+	landing := request(t, server, "/plans/")
+	if landing.Code != http.StatusOK {
+		t.Fatalf("landing status = %d", landing.Code)
+	}
+	body := landing.Body.String()
+	for _, want := range []string{`<h1 id="project-plans">Project Plans</h1>`, `href="#next"`, `href="/plans/other.md"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("landing does not contain %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `>index</a>`) || strings.Contains(body, `index.md</a>`) {
+		t.Errorf("landing lists its own index.md:\n%s", body)
+	}
+
+	redirect := request(t, server, "/plans/index.md")
+	if redirect.Code != http.StatusMovedPermanently || redirect.Header().Get("Location") != "/plans/" {
+		t.Errorf("direct index response = %d Location %q", redirect.Code, redirect.Header().Get("Location"))
+	}
 }
 
 func TestRawMarkdownRouting(t *testing.T) {
@@ -878,7 +904,7 @@ func TestEmbeddedFaviconAssets(t *testing.T) {
 
 func TestServedStylesheetIncludesSyntaxThemes(t *testing.T) {
 	root := t.TempDir()
-	response := request(t, testServer(t, root), "/.mdfmt/style.css?v=6")
+	response := request(t, testServer(t, root), "/.mdfmt/style.css?v=7")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d", response.Code)
 	}

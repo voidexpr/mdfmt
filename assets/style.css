@@ -106,6 +106,7 @@ a:hover { text-decoration-thickness: .14em; }
 
 .nav-entry.active { font-weight: 650; }
 .nav-entry.parent { margin-bottom: .7rem; }
+.project-navigation { margin-bottom: 1.25rem; }
 
 main {
   min-width: 0;

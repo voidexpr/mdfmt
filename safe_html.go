@@ -53,17 +53,16 @@ func renderSafeRawHTML(
 	return ast.WalkSkipChildren, nil
 }
 
-func annotateSafeRawHTML(
+func annotateSafeRawHTMLWithRewriter(
 	node ast.Node,
 	source []byte,
-	directoryComponents []string,
-	rewriteRootLinks bool,
+	rewriter markdownDestinationRewriter,
 ) {
 	raw, ok := rawHTMLSource(node, source)
 	if !ok {
 		return
 	}
-	sanitized, ok := sanitizeRawHTML(raw, directoryComponents, rewriteRootLinks)
+	sanitized, ok := sanitizeRawHTMLWithRewriter(raw, rewriter)
 	if ok && len(sanitized) > 0 {
 		node.SetAttributeString(sanitizedRawHTMLAttribute, sanitized)
 	}
@@ -99,6 +98,16 @@ func sanitizeRawHTML(
 	directoryComponents []string,
 	rewriteRootLinks bool,
 ) ([]byte, bool) {
+	var rewriter markdownDestinationRewriter
+	if rewriteRootLinks {
+		rewriter = func(destination []byte, _ bool) []byte {
+			return rewriteRootRelativeDestination(destination, directoryComponents)
+		}
+	}
+	return sanitizeRawHTMLWithRewriter(raw, rewriter)
+}
+
+func sanitizeRawHTMLWithRewriter(raw []byte, rewriter markdownDestinationRewriter) ([]byte, bool) {
 	tokenizer := xhtml.NewTokenizer(bytes.NewReader(raw))
 	var output bytes.Buffer
 	for {
@@ -113,7 +122,7 @@ func sanitizeRawHTML(
 		case xhtml.StartTagToken, xhtml.SelfClosingTagToken:
 			token := tokenizer.Token()
 			tag := strings.ToLower(token.Data)
-			attributes, ok := sanitizedAttributes(tag, token.Attr, directoryComponents, rewriteRootLinks)
+			attributes, ok := sanitizedAttributes(tag, token.Attr, rewriter)
 			if !ok {
 				return nil, false
 			}
@@ -152,8 +161,7 @@ type safeHTMLAttribute struct {
 func sanitizedAttributes(
 	tag string,
 	attributes []xhtml.Attribute,
-	directoryComponents []string,
-	rewriteRootLinks bool,
+	rewriter markdownDestinationRewriter,
 ) ([]safeHTMLAttribute, bool) {
 	var allowed map[string]bool
 	var order []string
@@ -186,7 +194,7 @@ func sanitizedAttributes(
 		switch name {
 		case "href", "src":
 			var ok bool
-			value, ok = sanitizedRawHTMLURL(value, tag == "img", directoryComponents, rewriteRootLinks)
+			value, ok = sanitizedRawHTMLURL(value, tag == "img", rewriter)
 			if !ok {
 				return nil, false
 			}
@@ -213,8 +221,7 @@ func sanitizedAttributes(
 func sanitizedRawHTMLURL(
 	raw string,
 	image bool,
-	directoryComponents []string,
-	rewriteRootLinks bool,
+	rewriter markdownDestinationRewriter,
 ) (string, bool) {
 	if raw == "" && image {
 		return "", false
@@ -235,8 +242,8 @@ func sanitizedRawHTMLURL(
 	default:
 		return "", false
 	}
-	if rewriteRootLinks && target.Scheme == "" && target.Host == "" {
-		raw = string(rewriteRootRelativeDestination([]byte(raw), directoryComponents))
+	if rewriter != nil && target.Scheme == "" && target.Host == "" {
+		raw = string(rewriter([]byte(raw), image))
 	}
 	return raw, true
 }
