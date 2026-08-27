@@ -40,7 +40,7 @@ Click either preview to open the full-size image.
 
 ## Install
 
-`mdfmt` requires Go 1.26.5 or newer.
+`mdfmt` requires Go 1.26.6 or newer.
 
 ```sh
 go install github.com/voidexpr/mdfmt@latest
