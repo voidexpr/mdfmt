@@ -4,3 +4,6 @@
 *.html
 !templates/*.html
 .ateam
+.playwright/
+.playwright-cli/
+.screenshots-tmp/
