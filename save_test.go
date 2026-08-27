@@ -241,7 +241,7 @@ func TestStandaloneRenderingPrivacyAndFeatures(t *testing.T) {
 		`id="options"`,
 		`id="detail"`,
 		`id="appendix"`,
-		`private-draft.md <span class="breadcrumb-meta">(3h ago,`,
+		`class="page-meta">3h ago · `,
 		modified.Local().Format("Jan 2, 2006 3:04 PM"),
 		humanSize(int64(len(sourceContent))),
 		`location.pathname + location.search`,

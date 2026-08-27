@@ -9,13 +9,13 @@
 {{template "favicons" .}}
   <title>{{.Title}} · mdfmt</title>
   <style>{{.Stylesheet}}</style>
+  <script>{{.Script}}</script>
 </head>
 <body>
   <div class="layout no-nav">
 {{template "main" .}}
 {{template "toc-sidebar" .}}
   </div>
-  <script>{{.Script}}</script>
 </body>
 </html>
 {{end}}

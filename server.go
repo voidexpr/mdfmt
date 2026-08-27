@@ -130,6 +130,15 @@ type navEntry struct {
 	Edit         *editAction
 }
 
+// setModified fills the display and sort fields derived from an entry's
+// modification time.
+func (e *navEntry) setModified(modTime, now time.Time) {
+	e.Modified = modTime.Format("Jan 2, 2006 15:04")
+	e.ModifiedFull = modTime.Format(time.RFC3339)
+	e.Ago = humanAgo(modTime, now)
+	e.SortModified = modTime.UnixNano()
+}
+
 type tocItem struct {
 	Title    string
 	ID       string
@@ -582,8 +591,8 @@ func (s *markdownServer) setPageAssetURLs(data *pageData, baseDirectory []string
 	assetURL := func(name string) template.URL {
 		return template.URL(s.pageURL(baseDirectory, []string{".mdfmt", name}, false))
 	}
-	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=7")
-	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=6")
+	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=8")
+	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=7")
 	data.FaviconSVGURL = assetURL("favicon.svg")
 	data.FaviconICOURL = assetURL("favicon.ico")
 	data.Favicon16URL = assetURL("favicon-16.png")
@@ -815,12 +824,14 @@ func (s *markdownServer) listDirectory(directory string, components []string, ac
 		entryComponents := appendComponents(components, name)
 		switch {
 		case info.IsDir():
-			directories = append(directories, navEntry{
+			entry := navEntry{
 				Name:  name,
 				Title: name,
 				URL:   template.URL(s.pageURL(components, entryComponents, true)),
 				IsDir: true,
-			})
+			}
+			entry.setModified(info.ModTime(), now)
+			directories = append(directories, entry)
 		case info.Mode().IsRegular() && isMarkdownName(name) && isMarkdownName(info.Name()):
 			title := stem(name)
 			if titles {
@@ -831,19 +842,17 @@ func (s *markdownServer) listDirectory(directory string, components []string, ac
 					title = documentTitle
 				}
 			}
-			files = append(files, navEntry{
-				Name:         name,
-				Title:        title,
-				URL:          template.URL(s.pageURL(components, entryComponents, false)),
-				Modified:     info.ModTime().Format("Jan 2, 2006 15:04"),
-				ModifiedFull: info.ModTime().Format(time.RFC3339),
-				Ago:          humanAgo(info.ModTime(), now),
-				Size:         humanSize(info.Size()),
-				SortModified: info.ModTime().UnixNano(),
-				SortSize:     info.Size(),
-				Active:       name == active,
-				Edit:         s.editAction(entryComponents, components, components, true),
-			})
+			entry := navEntry{
+				Name:     name,
+				Title:    title,
+				URL:      template.URL(s.pageURL(components, entryComponents, false)),
+				Size:     humanSize(info.Size()),
+				SortSize: info.Size(),
+				Active:   name == active,
+				Edit:     s.editAction(entryComponents, components, components, true),
+			}
+			entry.setModified(info.ModTime(), now)
+			files = append(files, entry)
 		}
 	}
 	sortEntries(directories)
@@ -1048,7 +1057,7 @@ func humanAgo(then, now time.Time) string {
 
 func fileBreadcrumbMeta(info fs.FileInfo, now time.Time) string {
 	return fmt.Sprintf(
-		"%s, %s, %s",
+		"%s · %s · %s",
 		humanAgoCompact(info.ModTime(), now),
 		info.ModTime().Local().Format("Jan 2, 2006 3:04 PM"),
 		humanSize(info.Size()),

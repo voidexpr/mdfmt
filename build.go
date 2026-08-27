@@ -660,20 +660,22 @@ func (b *staticSiteBuilder) directoryNavigation(directory *buildDirectory, activ
 	directories := make([]navEntry, 0, len(directory.children))
 	for _, child := range directory.children {
 		target := concatComponents(directory.mount.components, child.rel)
-		directories = append(directories, navEntry{Name: child.rel[len(child.rel)-1], Title: child.rel[len(child.rel)-1], URL: template.URL(staticDirectoryURL(base, target)), IsDir: true})
+		entry := navEntry{Name: child.rel[len(child.rel)-1], Title: child.rel[len(child.rel)-1], URL: template.URL(staticDirectoryURL(base, target)), IsDir: true}
+		entry.setModified(child.info.ModTime(), b.now)
+		directories = append(directories, entry)
 	}
 	files := make([]navEntry, 0, len(directory.documents))
 	for _, document := range directory.documents {
 		if document == directory.landing {
 			continue
 		}
-		files = append(files, navEntry{
+		entry := navEntry{
 			Name: document.rel[len(document.rel)-1], Title: document.title,
 			URL: template.URL(relativeURL(base, document.output, false)), Active: document.rel[len(document.rel)-1] == active,
-			Modified: document.info.ModTime().Format("Jan 2, 2006 15:04"), ModifiedFull: document.info.ModTime().Format(time.RFC3339),
-			Ago: humanAgo(document.info.ModTime(), b.now), Size: humanSize(document.info.Size()),
-			SortModified: document.info.ModTime().UnixNano(), SortSize: document.info.Size(),
-		})
+			Size: humanSize(document.info.Size()), SortSize: document.info.Size(),
+		}
+		entry.setModified(document.info.ModTime(), b.now)
+		files = append(files, entry)
 	}
 	sortEntries(directories)
 	sortEntries(files)

@@ -48,13 +48,29 @@ func main() {
 			fmt.Fprintf(os.Stderr, "stylegen: unknown Chroma style %q\n", theme.name)
 			os.Exit(1)
 		}
-		fmt.Fprintf(&css, "\n@media (prefers-color-scheme: %s) {\n", theme.scheme)
-		if err := formatter.WriteCSS(&css, style); err != nil {
+		var rules bytes.Buffer
+		if err := formatter.WriteCSS(&rules, style); err != nil {
 			fmt.Fprintf(os.Stderr, "stylegen: generate %s CSS: %v\n", theme.scheme, err)
 			os.Exit(1)
 		}
-		css.WriteString(theme.extra)
-		css.WriteString("}\n")
+		rules.WriteString(theme.extra)
+		// The light rules are the default. The dark rules apply when the system
+		// prefers dark and the page has not been forced light, or when the page
+		// has been forced dark (see the theme toggle in app.js); nesting keeps a
+		// single copy of the rules per wrapper.
+		if theme.scheme == "light" {
+			css.WriteString("\n")
+			css.Write(rules.Bytes())
+			continue
+		}
+		for _, wrapper := range []struct{ open, close string }{
+			{"@media (prefers-color-scheme: dark) {\n:root:not([data-theme=\"light\"]) {\n", "}\n}\n"},
+			{":root[data-theme=\"dark\"] {\n", "}\n"},
+		} {
+			css.WriteString("\n" + wrapper.open)
+			css.Write(rules.Bytes())
+			css.WriteString(wrapper.close)
+		}
 	}
 
 	if err := os.WriteFile(*output, css.Bytes(), 0o644); err != nil {

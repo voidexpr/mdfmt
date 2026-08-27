@@ -128,7 +128,7 @@ func TestBuildTokenizedCollection(t *testing.T) {
 		t.Errorf("collection hub has incorrect links or leaked token:\n%s", hub)
 	}
 	document := mustRead(t, filepath.Join(output, "work", "research", "notes.html"))
-	for _, want := range []string{`href="../../_mdfmt/style.css"`, `href="../../index.html"`, `href="../../a/index.html"`, `>a/</a>`, `>work/research/</a>`} {
+	for _, want := range []string{`href="../../_mdfmt/style.css"`, `href="../../index.html"`, `href="../../a/index.html"`, `>a/</span></a>`, `>work/research/</span></a>`} {
 		if !strings.Contains(document, want) {
 			t.Errorf("nested collection page does not contain %q:\n%s", want, document)
 		}

@@ -16,39 +16,42 @@
   <link rel="shortcut icon" href="{{.FaviconICOURL}}">
   <link rel="apple-touch-icon" href="{{.AppleIconURL}}" sizes="180x180">
 {{end}}
+{{define "icon-folder"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg>{{end}}
+{{define "icon-file"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5l3.5 3.5v9.5a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-12.5a.5.5 0 0 1 .5-.5z"/><path d="M9 1.5V5h3.5"/></svg>{{end}}
+{{define "icon-back"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>{{end}}
+{{define "icon-edit"}}<svg class="icon" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 2.5l2 2L5 13H3v-2z"/></svg>{{end}}
+{{define "theme-button"}}<button class="theme-button" type="button" data-theme-toggle data-mode="system" aria-label="Theme: follows system" title="Theme: follows system"><svg class="icon icon-system" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg><svg class="icon icon-light" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><svg class="icon icon-dark" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>{{end}}
+{{define "logo"}}<svg viewBox="0 0 493 92.9" width="74" height="14" role="img" aria-label="mdfmt"><path transform="translate(5.70,82.90) scale(0.048828,-0.048828)" class="logo-green" d="M1145 926 350 641 1145 358V109L88 524V760L1145 1176Z"/><path transform="translate(65.91,82.90) scale(0.048828,-0.048828)" class="logo-blue" d="M707 1470 612 1096H815L909 1470H1133L1036 1096H1229V881H983L909 588H1114V373H856L762 0H541L635 373H430L336 0H115L209 373H2V588H262L336 881H117V1096H391L485 1470ZM762 881H557L483 588H688Z"/><path transform="translate(126.11,82.90) scale(0.048828,-0.048828)" class="logo-text" d="M86 1493H438L616 838L793 1493H1147V0H893V1196L735 543H500L340 1196V0H86Z"/><path transform="translate(186.32,82.90) scale(0.048828,-0.048828)" class="logo-text" d="M432 1227V266H512Q686 266 760.0 375.5Q834 485 834 748Q834 1009 760.0 1118.0Q686 1227 512 1227ZM137 1493H453Q819 1493 980.0 1318.5Q1141 1144 1141 748Q1141 351 980.0 175.5Q819 0 453 0H137Z"/><path transform="translate(246.52,82.90) scale(0.048828,-0.048828)" class="logo-text" d="M1112 1233H477V911H1055V651H477V0H182V1493H1112Z"/><path transform="translate(306.73,82.90) scale(0.048828,-0.048828)" class="logo-text" d="M86 1493H438L616 838L793 1493H1147V0H893V1196L735 543H500L340 1196V0H86Z"/><path transform="translate(366.93,82.90) scale(0.048828,-0.048828)" class="logo-text" d="M764 0H469V1235H90V1493H1143V1235H764Z"/><path transform="translate(427.14,82.90) scale(0.048828,-0.048828)" class="logo-green" d="M88 926V1176L1145 760V524L88 109V358L883 641Z"/></svg>{{end}}
 {{define "edit-form"}}
       <form class="edit-form" method="post" action="{{.Action}}">
         <input type="hidden" name="token" value="{{.Token}}">
         <input type="hidden" name="path" value="{{.Path}}">
         <input type="hidden" name="return" value="{{.ReturnURL}}">
-        <button class="edit-button" type="submit" aria-label="Edit {{.Label}}" title="Edit {{.Label}}">Edit</button>
+        <button class="edit-button" type="submit" aria-label="Edit {{.Label}}" title="Edit {{.Label}}">{{template "icon-edit"}}Edit</button>
       </form>
 {{end}}
 {{define "main"}}
     <main class="{{if .IsDocument}}document-main{{else}}directory-main{{end}}">
       <div class="page-toolbar">
+        <div class="page-context">
         <nav class="breadcrumbs" aria-label="Breadcrumb">
-          {{range $index, $crumb := .Breadcrumbs}}{{if $index}}<span aria-hidden="true">/</span>{{end}}{{if $crumb.URL}}<a href="{{$crumb.URL}}">{{$crumb.Name}}</a>{{else}}<span aria-current="page">{{$crumb.Name}}{{if $crumb.ModifiedFull}} <span class="breadcrumb-meta">(<time datetime="{{$crumb.ModifiedFull}}" data-relative-time data-relative-style="compact">{{$crumb.Ago}}</time>, {{$crumb.Modified}}, {{$crumb.Size}})</span>{{else}}{{with $crumb.Meta}} <span class="breadcrumb-meta">({{.}})</span>{{end}}{{end}}</span>{{end}}{{end}}
+          {{range $index, $crumb := .Breadcrumbs}}{{if $index}}<span class="crumb-separator" aria-hidden="true">/</span>{{end}}{{if $crumb.URL}}<a href="{{$crumb.URL}}">{{$crumb.Name}}</a>{{else}}<span aria-current="page">{{$crumb.Name}}</span>{{end}}{{end}}
         </nav>
-        {{if or .RawURL .Edit}}
+        {{range .Breadcrumbs}}{{if not .URL}}{{if .ModifiedFull}}<span class="page-meta"><time datetime="{{.ModifiedFull}}" data-relative-time data-relative-style="compact">{{.Ago}}</time> · {{.Modified}} · {{.Size}}</span>{{else}}{{with .Meta}}<span class="page-meta">{{.}}</span>{{end}}{{end}}{{end}}{{end}}
+        </div>
         <div class="page-actions">
+          {{template "theme-button"}}
           {{with .RawURL}}<a class="raw-link" href="{{.}}" aria-label="View raw Markdown" title="View raw Markdown">Raw</a>{{end}}
           {{with .Edit}}{{template "edit-form" .}}{{end}}
         </div>
-        {{end}}
       </div>
       <article>
-        {{if .ShowTitle}}<h1 class="page-title">{{.Title}}</h1>{{end}}
         {{if .IsDocument}}
+          {{if .ShowTitle}}<h1 class="page-title">{{.Title}}</h1>{{end}}
           <div class="markdown">{{.Body}}</div>
         {{else}}
           <div class="directory-view">
-            {{if .Directories}}
-            <div class="folder-list">
-              {{range .Directories}}<a class="folder-entry" href="{{.URL}}"><span aria-hidden="true">▸</span><span>{{.Title}}/</span></a>{{end}}
-            </div>
-            {{end}}
-            {{if .Files}}
+            {{if or .Directories .Files}}
             <div class="directory-table-wrap">
               <table class="directory-table{{if .CanEdit}} can-edit{{end}}" data-sortable>
                 <colgroup>
@@ -61,30 +64,39 @@
                 </colgroup>
                 <thead>
                   <tr>
-                    <th scope="col" aria-sort="ascending"><button type="button" data-sort-key="name">Filename</button></th>
+                    <th scope="col" aria-sort="ascending"><button type="button" data-sort-key="name">Name</button></th>
                     <th scope="col"><button type="button" data-sort-key="modified">Last modified</button></th>
                     <th scope="col">Ago</th>
-                    <th scope="col"><button type="button" data-sort-key="size">Size</button></th>
+                    <th class="size-heading" scope="col"><button type="button" data-sort-key="size">Size</button></th>
                     <th scope="col">Title</th>
                     {{if .CanEdit}}<th class="edit-heading" scope="col">Action</th>{{end}}
                   </tr>
                 </thead>
                 <tbody>
+                  {{range .Directories}}
+                  <tr class="directory" data-kind="directory" data-name="{{.Name}}" data-modified="{{.SortModified}}" data-size="0">
+                    <td class="filename"><a href="{{.URL}}">{{template "icon-folder"}}<span>{{.Name}}/</span></a></td>
+                    <td class="modified">{{if .ModifiedFull}}<time datetime="{{.ModifiedFull}}">{{.Modified}}</time>{{end}}</td>
+                    <td class="ago">{{if .ModifiedFull}}<time datetime="{{.ModifiedFull}}" data-relative-time>{{.Ago}}</time>{{end}}</td>
+                    <td class="size"></td>
+                    <td class="document-title"></td>
+                    {{if $.CanEdit}}<td class="edit-action"></td>{{end}}
+                  </tr>
+                  {{end}}
                   {{range .Files}}
-                  <tr data-name="{{.Name}}" data-modified="{{.SortModified}}" data-size="{{.SortSize}}">
-                    <td class="filename"><a href="{{.URL}}">{{.Name}}</a></td>
+                  <tr data-kind="file" data-name="{{.Name}}" data-modified="{{.SortModified}}" data-size="{{.SortSize}}">
+                    <td class="filename"><a href="{{.URL}}">{{template "icon-file"}}<span>{{.Name}}</span></a></td>
                     <td class="modified"><time datetime="{{.ModifiedFull}}">{{.Modified}}</time></td>
                     <td class="ago"><time datetime="{{.ModifiedFull}}" data-relative-time>{{.Ago}}</time></td>
                     <td class="size">{{.Size}}</td>
                     <td class="document-title">{{.Title}}</td>
-                    {{with .Edit}}<td class="edit-action">{{template "edit-form" .}}</td>{{end}}
+                    {{if $.CanEdit}}<td class="edit-action">{{with .Edit}}{{template "edit-form" .}}{{end}}</td>{{end}}
                   </tr>
                   {{end}}
                 </tbody>
               </table>
             </div>
-            {{end}}
-            {{if and (not .Directories) (not .Files)}}<p class="empty">No Markdown files or directories here.</p>{{end}}
+            {{else}}<p class="empty">No Markdown files or directories here.</p>{{end}}
           </div>
         {{end}}
       </article>
@@ -94,8 +106,8 @@
 {{define "toc-sidebar"}}
     {{if .TOC}}
     <aside class="right-sidebar" aria-label="On this page">
-      <div class="sidebar-heading">
-        <div class="sidebar-title">On this page</div>
+      <div class="pane-head">
+        <span>On this page</span>
         <a class="toc-top" href="{{.TopURL}}" data-top>top</a>
       </div>
       <nav class="toc">{{template "toc" .TOC}}</nav>
@@ -114,22 +126,26 @@
 {{template "favicons" .}}
   <title>{{.Title}} · mdfmt</title>
   <link rel="stylesheet" href="{{.StylesheetURL}}">
-  <script src="{{.ScriptURL}}" defer></script>
+  <script src="{{.ScriptURL}}"></script>
 </head>
 <body>
   <div class="layout">
     <aside class="left-sidebar" aria-label="Directory navigation">
+      <div class="pane-head">
+        {{$root := ""}}{{range .Breadcrumbs}}{{if .URL}}{{if not $root}}{{$root = .URL}}{{end}}{{end}}{{end}}
+        {{if $root}}<a class="brand" href="{{$root}}">{{template "logo"}}</a>{{else}}<span class="brand">{{template "logo"}}</span>{{end}}
+      </div>
       {{if .Projects}}
       <div class="sidebar-title">Projects</div>
       <nav class="project-navigation">
-        {{range .Projects}}<a class="nav-entry directory{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="true"{{end}}>{{.Title}}/</a>{{end}}
+        {{range .Projects}}<a class="nav-entry directory{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="true"{{end}}>{{template "icon-folder"}}<span class="name">{{.Title}}/</span></a>{{end}}
       </nav>
       {{end}}
       <div class="sidebar-title">{{.Directory}}</div>
+      {{with .Parent}}<nav class="parent-navigation"><a class="nav-entry parent" href="{{.URL}}">{{template "icon-back"}}<span class="name">{{.Title}}</span></a></nav>{{end}}
       <nav>
-        {{with .Parent}}<a class="nav-entry parent" href="{{.URL}}">← {{.Title}}</a>{{end}}
-        {{range .Directories}}<a class="nav-entry directory" href="{{.URL}}">{{.Title}}/</a>{{end}}
-        {{range .Files}}<a class="nav-entry{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}
+        {{range .Directories}}<a class="nav-entry directory" href="{{.URL}}">{{template "icon-folder"}}<span class="name">{{.Title}}/</span></a>{{end}}
+        {{range .Files}}<a class="nav-entry{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="page"{{end}}>{{template "icon-file"}}<span class="name">{{.Title}}</span>{{with .Size}}<span class="size">{{.}}</span>{{end}}</a>{{end}}
       </nav>
     </aside>
 
