@@ -1,4 +1,4 @@
-.PHONY: all build test test-race vet lint fmt generate-check vulncheck tidy-check install clean coverage ci
+.PHONY: all build test test-race vet lint fmt generate-check vulncheck tidy-check install clean coverage ci screenshots
 
 all: ci
 
@@ -40,6 +40,9 @@ clean:
 coverage:
 	go test -coverpkg=./... -coverprofile=cover.out ./...
 	go tool cover -func=cover.out
+
+screenshots: build
+	sh docs/take-screenshots.sh
 
 ci: build test-race vet lint generate-check tidy-check vulncheck
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
