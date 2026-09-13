@@ -550,19 +550,27 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   .right-sidebar { display: none; }
   main { border: 0; }
 
-  /* Two toolbar rows: the breadcrumbs across the full width, then the
-     metadata beside the controls. Only the parent and current crumbs are
-     shown, and the full date is dropped. */
+  /* The toolbar sits at the bottom of the screen, within thumb reach, in two
+     rows: the full breadcrumb trail across the width, then the metadata
+     beside the controls. The full date is dropped. app.js keeps
+     --toolbar-height current so the content and the popovers clear it. */
   .page-toolbar {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
     flex-wrap: wrap;
     gap: 0 .75rem;
-    padding: .35rem .75rem .35rem 1.25rem;
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+    padding: .35rem .75rem calc(.35rem + env(safe-area-inset-bottom)) 1.25rem;
   }
+  main { padding-bottom: calc(var(--toolbar-height, 6rem) + .5rem); }
+  .page-menu { top: auto; bottom: calc(100% + .3rem); }
   .page-context { display: contents; }
   .breadcrumbs { flex: 1 0 100%; }
   .page-toolbar:not(:has(.page-meta)) .breadcrumbs { flex: 1 1 auto; }
-  .breadcrumbs > :nth-last-child(n+4) { display: none; }
-  .breadcrumbs:has(> :nth-last-child(4))::before { content: "… /"; color: var(--border-strong); }
   .page-meta { flex: 1 1 auto; white-space: normal; }
   .meta-detail { display: none; }
 
@@ -571,10 +579,11 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
     display: block;
     position: fixed;
     z-index: 7;
-    top: calc(var(--toolbar-bottom, 3.4rem) + .35rem);
+    top: auto;
     right: .75rem;
+    bottom: calc(var(--toolbar-height, 6rem) + .35rem);
     left: .75rem;
-    max-height: calc(100vh - var(--toolbar-bottom, 3.4rem) - 1.5rem);
+    max-height: calc(100vh - var(--toolbar-height, 6rem) - 1.5rem);
     border: 1px solid var(--border);
     border-radius: 4px;
     background: var(--panel-raised);
