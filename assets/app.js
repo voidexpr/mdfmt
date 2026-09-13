@@ -163,7 +163,13 @@
     const tocToggle = document.querySelector("[data-toc-toggle]");
     const tocPanel = document.querySelector(".right-sidebar");
     if (tocToggle && tocPanel) {
-      registerPopover(tocToggle, tocPanel, (open) => root.classList.toggle("toc-open", open));
+      const toolbar = document.querySelector(".page-toolbar");
+      registerPopover(tocToggle, tocPanel, (open) => {
+        // The overlay hangs below the sticky toolbar, whose height depends on
+        // how the breadcrumbs wrap.
+        if (open) root.style.setProperty("--toolbar-bottom", `${toolbar.getBoundingClientRect().bottom}px`);
+        root.classList.toggle("toc-open", open);
+      });
     }
 
     const recent = loadRecent();
