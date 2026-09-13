@@ -143,6 +143,7 @@ type navEntry struct {
 	Modified     string
 	ModifiedFull string
 	Ago          string
+	AgoCompact   string
 	Size         string
 	SortModified int64
 	SortSize     int64
@@ -157,6 +158,7 @@ func (e *navEntry) setModified(modTime, now time.Time) {
 	e.Modified = modTime.Format("Jan 2, 2006 15:04")
 	e.ModifiedFull = modTime.Format(time.RFC3339)
 	e.Ago = humanAgo(modTime, now)
+	e.AgoCompact = humanAgoCompact(modTime, now)
 	e.SortModified = modTime.UnixNano()
 }
 

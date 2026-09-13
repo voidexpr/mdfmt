@@ -119,17 +119,20 @@
       return "just now";
     };
 
+    // The server renders the same strings, so the periodic refresh only
+    // touches an element whose label has actually changed.
+    const relativeTimes = Array.from(document.querySelectorAll("time[data-relative-time]"));
     const updateRelativeTimes = () => {
-      for (const element of document.querySelectorAll("time[data-relative-time]")) {
+      for (const element of relativeTimes) {
         const value = relativeAge(
           element.dateTime,
           element.dataset.relativeStyle === "compact",
         );
-        if (value) element.textContent = value;
+        if (value && element.textContent !== value) element.textContent = value;
       }
     };
     updateRelativeTimes();
-    if (document.querySelector("time[data-relative-time]")) {
+    if (relativeTimes.length) {
       setInterval(updateRelativeTimes, 60 * 1000);
     }
 
@@ -194,7 +197,7 @@
           title.className = "name";
           title.textContent = record.title || record.url;
           const age = document.createElement("span");
-          age.className = "size";
+          age.className = "detail";
           age.textContent = relativeAge(record.updated, true);
           link.append(title, age);
           recentMenu.append(link);
@@ -216,6 +219,12 @@
         recentMenu.hidden = !open;
       });
     }
+
+    // On narrow screens the full timestamp is hidden; a tap on the age
+    // reveals it.
+    document.querySelector(".page-meta time")?.addEventListener("click", (event) => {
+      event.currentTarget.parentElement.classList.toggle("show-detail");
+    });
 
     const topLink = document.querySelector("[data-top]");
     if (topLink) {
@@ -322,26 +331,94 @@
       addEventListener("pagehide", savePosition);
     }
 
+    // A JSON setting kept in localStorage with a path-wide cookie fallback,
+    // so it survives when one of the two is unavailable.
+    const persistedSetting = (storageKey, cookieKey) => ({
+      load: () => {
+        try {
+          const value = JSON.parse(localStorage.getItem(storageKey));
+          if (value) return value;
+        } catch {
+          // Try the cookie below.
+        }
+        try {
+          const prefix = `${cookieKey}=`;
+          const cookie = document.cookie
+            .split(";")
+            .map((part) => part.trim())
+            .find((part) => part.startsWith(prefix));
+          if (!cookie) return null;
+          const serialized = decodeURIComponent(cookie.slice(prefix.length));
+          const value = JSON.parse(serialized);
+          localStorage.setItem(storageKey, serialized);
+          return value;
+        } catch {
+          return null;
+        }
+      },
+      save: (value) => {
+        const serialized = JSON.stringify(value);
+        try {
+          localStorage.setItem(storageKey, serialized);
+        } catch {
+          // Fall through to the path-wide cookie.
+        }
+        try {
+          document.cookie =
+            `${cookieKey}=${encodeURIComponent(serialized)}; Path=/; ` +
+            "Max-Age=31536000; SameSite=Lax";
+        } catch {
+          // The setting still applies to this page when storage is disabled.
+        }
+      },
+    });
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+    const compare = (left, right, key) => {
+      if (key === "name") return collator.compare(left.dataset.name, right.dataset.name);
+      return Number(left.dataset[key]) - Number(right.dataset[key]);
+    };
+    const sortKeysOf = (buttons) => new Set(buttons.map((button) => button.dataset.sortKey));
+
+    // The sidebar file list: one fixed direction per key, most recent first
+    // by default, remembered separately from the directory table.
+    const fileList = document.querySelector("[data-file-list]");
+    const sortControl = document.querySelector("[data-sidebar-sort]");
+    if (fileList && sortControl) {
+      const entries = Array.from(fileList.querySelectorAll("a[data-name]"));
+      const sortButtons = Array.from(sortControl.querySelectorAll("button[data-sort-key]"));
+      const descendingKeys = new Set(["modified", "size"]);
+      const setting = persistedSetting("mdfmt.sidebar-sort", "mdfmt_sidebar_sort");
+      const applyFileSort = (key, persist) => {
+        const sign = descendingKeys.has(key) ? -1 : 1;
+        const ordered = entries.slice().sort((left, right) => sign * compare(left, right, key));
+        if (ordered.some((entry, index) => entry !== entries[index])) {
+          const fragment = document.createDocumentFragment();
+          fragment.append(...ordered);
+          fileList.append(fragment);
+          entries.splice(0, entries.length, ...ordered);
+        }
+        fileList.dataset.sort = key;
+        for (const button of sortButtons) {
+          button.setAttribute("aria-pressed", String(button.dataset.sortKey === key));
+        }
+        if (persist) setting.save(key);
+      };
+      const saved = setting.load();
+      applyFileSort(sortKeysOf(sortButtons).has(saved) ? saved : "modified", false);
+      for (const button of sortButtons) {
+        button.addEventListener("click", () => applyFileSort(button.dataset.sortKey, true));
+      }
+    }
+
     const table = document.querySelector(".directory-table[data-sortable]");
     if (!table) return;
 
     const body = table.querySelector("tbody");
     const buttons = Array.from(table.querySelectorAll("button[data-sort-key]"));
-    const storageKey = "mdfmt.directory-sort";
-    const cookieKey = "mdfmt_directory_sort";
-    const validKeys = new Set(["name", "modified", "size"]);
+    const validKeys = sortKeysOf(buttons);
+    const setting = persistedSetting("mdfmt.directory-sort", "mdfmt_directory_sort");
     let activeKey = "name";
     let direction = "ascending";
-
-    const compare = (left, right, key) => {
-      if (key === "name") {
-        return left.dataset.name.localeCompare(right.dataset.name, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        });
-      }
-      return Number(left.dataset[key]) - Number(right.dataset[key]);
-    };
 
     const applySort = (key, nextDirection, persist) => {
       activeKey = key;
@@ -363,44 +440,10 @@
       const activeButton = buttons.find((button) => button.dataset.sortKey === key);
       activeButton.closest("th").setAttribute("aria-sort", direction);
 
-      if (persist) {
-        const serialized = JSON.stringify({ key, direction });
-        try {
-          localStorage.setItem(storageKey, serialized);
-        } catch {
-          // Fall through to the path-wide cookie.
-        }
-        try {
-          document.cookie =
-            `${cookieKey}=${encodeURIComponent(serialized)}; Path=/; ` +
-            "Max-Age=31536000; SameSite=Lax";
-        } catch {
-          // Sorting still works when browser storage is disabled.
-        }
-      }
+      if (persist) setting.save({ key, direction });
     };
 
-    let saved = null;
-    try {
-      saved = JSON.parse(localStorage.getItem(storageKey));
-    } catch {
-      // Try the cookie below.
-    }
-    if (!saved) {
-      try {
-        const prefix = `${cookieKey}=`;
-        const cookie = document.cookie
-          .split(";")
-          .map((part) => part.trim())
-          .find((part) => part.startsWith(prefix));
-        if (cookie) {
-          saved = JSON.parse(decodeURIComponent(cookie.slice(prefix.length)));
-          localStorage.setItem(storageKey, JSON.stringify(saved));
-        }
-      } catch {
-        // Use the filename-ascending default when storage is unavailable or invalid.
-      }
-    }
+    const saved = setting.load();
     if (
       saved &&
       validKeys.has(saved.key) &&

@@ -298,6 +298,12 @@ browser. Positions are stored in the browser's `localStorage`, keyed by the
 document's path relative to the site root, so they survive a rebuild with a
 new path token.
 
+The left sidebar lists the current folder's documents with their age. A
+small control in the folder heading sorts them by most recent first, the
+default, alphabetically, or largest first; the choice is remembered in the
+browser, separately from the directory listing's own sort. Hovering an entry
+shows its filename, title, modification date, age, and size.
+
 The toolbar has two additional buttons next to the theme toggle:
 
 * a recent-documents menu listing the 20 most recently viewed documents,

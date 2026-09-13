@@ -101,6 +101,10 @@ a:hover { text-decoration: underline; }
 .logo-text { fill: currentColor; }
 
 .sidebar-title {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  justify-content: space-between;
   margin: .5rem 0 .15rem;
   padding: 0 .75rem;
   color: var(--faint);
@@ -109,6 +113,33 @@ a:hover { text-decoration: underline; }
   letter-spacing: .06em;
   text-transform: uppercase;
 }
+
+.sort-control { display: inline-flex; flex: 0 0 auto; gap: 2px; }
+
+.sort-control button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  appearance: none;
+  min-width: 1.35rem;
+  height: 1.15rem;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  padding: 0 .2rem;
+  color: var(--faint);
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sort-control .glyph { font-size: 10px; font-weight: 700; line-height: 1; }
+.sort-control button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* The entry detail follows the sort: size when sorting by size, else age. */
+[data-file-list]:not([data-sort="size"]) .detail.size,
+[data-file-list][data-sort="size"] .detail.age { display: none; }
 
 .nav-entry {
   display: flex;
@@ -125,7 +156,7 @@ a:hover { text-decoration: underline; }
 
 .nav-entry .icon { color: var(--faint); }
 .nav-entry .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.nav-entry .size { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+.nav-entry .detail { color: var(--faint); font-family: var(--mono); font-size: 11px; }
 
 .nav-entry:hover { background: var(--hover); color: var(--text); text-decoration: none; }
 
@@ -417,7 +448,9 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
 }
 
 .directory-table th button:hover,
-.directory-table th button:focus-visible {
+.directory-table th button:focus-visible,
+.sort-control button:hover,
+.sort-control button:focus-visible {
   color: var(--accent);
 }
 
@@ -537,6 +570,7 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   .menu-button .icon { width: 20px; height: 20px; }
   .page-menu { padding: .35rem; }
   .page-menu .nav-entry { height: 2.5rem; }
+  .sort-control button { min-width: 2.5rem; height: 2.5rem; }
 }
 
 @media (max-width: 900px) {
@@ -572,7 +606,8 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   .breadcrumbs { flex: 1 0 100%; }
   .page-toolbar:not(:has(.page-meta)) .breadcrumbs { flex: 1 1 auto; }
   .page-meta { flex: 1 1 auto; white-space: normal; }
-  .meta-detail { display: none; }
+  .page-meta time { cursor: pointer; }
+  .page-meta:not(.show-detail) .meta-detail { display: none; }
 
   .toc-button { display: inline-flex; }
   html.toc-open .right-sidebar {

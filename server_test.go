@@ -892,6 +892,21 @@ func TestWebManifestAndReadingPositionMarkup(t *testing.T) {
 	if !strings.Contains(guide, `data-toc-toggle`) || !strings.Contains(guide, `data-recent-toggle`) {
 		t.Errorf("document with headings lacks the toolbar buttons:\n%s", guide)
 	}
+	for _, want := range []string{
+		`data-sidebar-sort`,
+		`<button type="button" data-sort-key="modified"`,
+		`<nav data-file-list>`,
+		`title="plain.md&#10;plain&#10;`,
+		`data-name="plain.md"`,
+		`data-modified="`,
+		`data-size="18"`,
+		`class="detail age"`,
+		`class="detail size"`,
+	} {
+		if !strings.Contains(guide, want) {
+			t.Errorf("sidebar entry lacks %q:\n%s", want, guide)
+		}
+	}
 	plain := request(t, server, "/plain.md").Body.String()
 	if strings.Contains(plain, `data-toc-toggle`) {
 		t.Errorf("document without headings has a table-of-contents button:\n%s", plain)
