@@ -286,7 +286,7 @@ func TestBreadcrumbConstruction(t *testing.T) {
 	}
 	crumbs := breadcrumbsFor(root, []string{"plans", "next release"}, &breadcrumb{
 		Name: "overview.md",
-		Meta: "3h ago, Jul 28, 2026 3:00 PM, 1.2 KiB",
+		Size: "1.2 KiB",
 	})
 	if len(crumbs) != 4 {
 		t.Fatalf("got %d breadcrumbs, want 4", len(crumbs))
@@ -297,7 +297,7 @@ func TestBreadcrumbConstruction(t *testing.T) {
 	if crumbs[2].Name != "next release" || crumbs[2].URL != "/plans/next%20release/" {
 		t.Errorf("nested crumb = %#v", crumbs[2])
 	}
-	if crumbs[3].Name != "overview.md" || crumbs[3].URL != "" || crumbs[3].Meta != "3h ago, Jul 28, 2026 3:00 PM, 1.2 KiB" {
+	if crumbs[3].Name != "overview.md" || crumbs[3].URL != "" || crumbs[3].Size != "1.2 KiB" {
 		t.Errorf("document crumb = %#v", crumbs[3])
 	}
 }
@@ -510,8 +510,8 @@ func TestFileAndDirectoryRouting(t *testing.T) {
 		}
 		for _, want := range []string{
 			`aria-current="page">guide.md`,
-			`class="page-meta">3h ago · `,
-			guideModified.Local().Format("Jan 2, 2006 3:04 PM"),
+			`class="page-meta"><time datetime="` + guideModified.Format(time.RFC3339) + `" data-relative-time data-relative-style="compact">3h ago</time>`,
+			`<span class="meta-detail"> · ` + guideModified.Local().Format("Jan 2, 2006 3:04 PM") + `</span> · `,
 			humanSize(int64(len(guideContent))),
 		} {
 			if !strings.Contains(body, want) {

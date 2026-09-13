@@ -509,9 +509,10 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
 .toc-top { color: var(--muted); font-weight: 500; letter-spacing: 0; text-transform: none; }
 .toc-top:hover { color: var(--accent); }
 
-/* Touch-sized toolbar controls, close to native tap targets. */
+/* Touch-sized toolbar controls: native-style bare icons with a 40px tap
+   area, text buttons kept compact. */
 @media (max-width: 900px), (pointer: coarse) {
-  .page-actions { gap: .5rem; }
+  .page-actions { gap: .25rem; }
   .raw-link,
   .edit-button,
   .theme-button,
@@ -522,13 +523,16 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
     font-size: 13px;
   }
   .raw-link,
-  .edit-button { padding: 0 .8rem; }
+  .edit-button { padding: 0 .7rem; }
   .theme-button,
   .menu-button {
     justify-content: center;
     min-width: 2.5rem;
-    padding: 0 .5rem;
+    border-color: transparent;
+    background: transparent;
+    padding: 0;
   }
+  .menu-button[aria-expanded="true"] { background: var(--accent-soft); }
   .theme-button .icon,
   .menu-button .icon { width: 20px; height: 20px; }
   .page-menu { padding: .35rem; }
@@ -545,7 +549,22 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   .left-sidebar,
   .right-sidebar { display: none; }
   main { border: 0; }
-  .page-meta { white-space: normal; }
+
+  /* Two toolbar rows: the breadcrumbs across the full width, then the
+     metadata beside the controls. Only the parent and current crumbs are
+     shown, and the full date is dropped. */
+  .page-toolbar {
+    flex-wrap: wrap;
+    gap: 0 .75rem;
+    padding: .35rem .75rem .35rem 1.25rem;
+  }
+  .page-context { display: contents; }
+  .breadcrumbs { flex: 1 0 100%; }
+  .page-toolbar:not(:has(.page-meta)) .breadcrumbs { flex: 1 1 auto; }
+  .breadcrumbs > :nth-last-child(n+4) { display: none; }
+  .breadcrumbs:has(> :nth-last-child(4))::before { content: "… /"; color: var(--border-strong); }
+  .page-meta { flex: 1 1 auto; white-space: normal; }
+  .meta-detail { display: none; }
 
   .toc-button { display: inline-flex; }
   html.toc-open .right-sidebar {

@@ -40,7 +40,7 @@
         <nav class="breadcrumbs" aria-label="Breadcrumb">
           {{range $index, $crumb := .Breadcrumbs}}{{if $index}}<span class="crumb-separator" aria-hidden="true">/</span>{{end}}{{if $crumb.URL}}<a href="{{$crumb.URL}}">{{$crumb.Name}}</a>{{else}}<span aria-current="page">{{$crumb.Name}}</span>{{end}}{{end}}
         </nav>
-        {{range .Breadcrumbs}}{{if not .URL}}{{if .ModifiedFull}}<span class="page-meta"><time datetime="{{.ModifiedFull}}" data-relative-time data-relative-style="compact">{{.Ago}}</time> · {{.Modified}} · {{.Size}}</span>{{else}}{{with .Meta}}<span class="page-meta">{{.}}</span>{{end}}{{end}}{{end}}{{end}}
+        {{range .Breadcrumbs}}{{if and (not .URL) .ModifiedFull}}<span class="page-meta"><time datetime="{{.ModifiedFull}}" data-relative-time data-relative-style="compact">{{.Ago}}</time><span class="meta-detail"> · {{.Modified}}</span> · {{.Size}}</span>{{end}}{{end}}
         </div>
         <div class="page-actions">
           {{template "theme-button"}}

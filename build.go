@@ -494,11 +494,8 @@ func (b *staticSiteBuilder) writeDocument(document *buildDocument, landing bool)
 	directories, files := b.directoryNavigation(document.directory, filepath.Base(document.sourcePath), base)
 	var documentCrumb *breadcrumb
 	if !landing {
-		documentCrumb = &breadcrumb{
-			Name: document.rel[len(document.rel)-1], ModifiedFull: document.info.ModTime().Format(time.RFC3339),
-			Modified: document.info.ModTime().Local().Format("Jan 2, 2006 3:04 PM"),
-			Ago:      humanAgoCompact(document.info.ModTime(), b.now), Size: humanSize(document.info.Size()),
-		}
+		crumb := fileCrumb(document.rel[len(document.rel)-1], document.info, b.now)
+		documentCrumb = &crumb
 	}
 	data := pageData{
 		Title: rendered.Title, Directory: directoryDisplayName(document.directory),

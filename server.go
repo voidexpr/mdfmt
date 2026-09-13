@@ -130,7 +130,6 @@ type pageData struct {
 type breadcrumb struct {
 	Name         string
 	URL          template.URL
-	Meta         string
 	ModifiedFull string
 	Modified     string
 	Ago          string
@@ -553,10 +552,8 @@ func (s *markdownServer) serveMarkdownPage(w http.ResponseWriter, r *http.Reques
 	if s.pathToken != "" {
 		rawURL = "?raw=1"
 	}
-	documentCrumb := &breadcrumb{
-		Name: components[len(components)-1],
-		Meta: fileBreadcrumbMeta(info, time.Now()),
-	}
+	crumb := fileCrumb(components[len(components)-1], info, time.Now())
+	documentCrumb := &crumb
 	if landing {
 		documentCrumb = nil
 		rawURL = ""
@@ -1082,13 +1079,16 @@ func humanAgo(then, now time.Time) string {
 	}
 }
 
-func fileBreadcrumbMeta(info fs.FileInfo, now time.Time) string {
-	return fmt.Sprintf(
-		"%s · %s · %s",
-		humanAgoCompact(info.ModTime(), now),
-		info.ModTime().Local().Format("Jan 2, 2006 3:04 PM"),
-		humanSize(info.Size()),
-	)
+// fileCrumb is the current-page breadcrumb of a document, carrying the
+// modification time and size the toolbar shows beside it.
+func fileCrumb(name string, info fs.FileInfo, now time.Time) breadcrumb {
+	return breadcrumb{
+		Name:         name,
+		ModifiedFull: info.ModTime().Format(time.RFC3339),
+		Modified:     info.ModTime().Local().Format("Jan 2, 2006 3:04 PM"),
+		Ago:          humanAgoCompact(info.ModTime(), now),
+		Size:         humanSize(info.Size()),
+	}
 }
 
 func humanAgoCompact(then, now time.Time) string {
