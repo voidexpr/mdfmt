@@ -232,6 +232,7 @@ func TestStandaloneRenderingPrivacyAndFeatures(t *testing.T) {
 		`rel="apple-touch-icon" href="data:image/png;base64,`,
 		`class="layout no-nav"`,
 		`class="toc-top" href="" data-top`,
+		`data-toc-toggle`,
 		`href="#install"`,
 		`href="#options"`,
 		`href="#detail"`,
@@ -265,6 +266,9 @@ func TestStandaloneRenderingPrivacyAndFeatures(t *testing.T) {
 		`raw HTML omitted`,
 		`class="left-sidebar"`,
 		`style="`,
+		`data-root=`,
+		`type="button" data-recent-toggle`,
+		`rel="manifest"`,
 	} {
 		if strings.Contains(document, forbidden) {
 			t.Errorf("standalone output contains forbidden value %q", forbidden)

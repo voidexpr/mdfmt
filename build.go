@@ -448,6 +448,7 @@ func (b *staticSiteBuilder) writeAssets() error {
 		{"favicon-32.png", favicon32Asset},
 		{"favicon-48.png", favicon48Asset},
 		{"apple-touch-icon.png", appleTouchIconAsset},
+		{"manifest.webmanifest", staticManifestAsset},
 	}
 	for _, asset := range assets {
 		if err := writeBuildFile(filepath.Join(b.siteRoot, "_mdfmt", asset.name), asset.content); err != nil {
@@ -734,6 +735,8 @@ func (b *staticSiteBuilder) setStaticAssetURLs(data *pageData, base []string) {
 	data.Favicon32URL = asset("favicon-32.png")
 	data.Favicon48URL = asset("favicon-48.png")
 	data.AppleIconURL = asset("apple-touch-icon.png")
+	data.ManifestURL = asset("manifest.webmanifest")
+	data.RootURL = template.URL(staticDirectoryURL(base, nil))
 }
 
 func staticDirectoryURL(base, directory []string) string {

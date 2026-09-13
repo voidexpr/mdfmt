@@ -41,19 +41,23 @@ they gain the same behaviour where it applies.
 ## Site root and page identity
 
 Every generated page already computes relative asset URLs from its depth.
-Add a `RootURL` field to `pageData`, the relative URL of the site root from
-the current page (`./`, `../`, `../../`, ...). The page template renders it as
+Add a `RootURL` field to `pageData`, the relative URL of the site's root page
+from the current page (`./`, `../` in `serve`; `index.html`, `../index.html`
+in `build`). The page template renders it as
 `<html lang="en" data-root="{{.RootURL}}">`.
 
-- In `build` the site root is `TARGET_DIR` or `TARGET_DIR/TOKEN`.
-- In `serve` it is `/` or `/TOKEN/`.
+- In `build` the site root is `TARGET_DIR` or `TARGET_DIR/TOKEN` and the root
+  page is its `index.html`.
+- In `serve` it is `/` or `/TOKEN/`, whose directory page is the root page.
 - `save` standalone files have no site; `standalone.html` renders no
   `data-root`.
 
-The script resolves `data-root` against `location.href` to obtain the
-absolute root, and identifies a document by its path relative to that root,
-for example `guide/setup.html` in `build` or `guide/setup.md` in `serve`.
-Without `data-root`, the identity is `location.pathname`.
+The script resolves `data-root` against `location.href` to obtain the root
+page, takes its directory as the site root, and identifies a document by its
+path relative to that root, for example `guide/setup.html` in `build` or
+`guide/setup.md` in `serve`. A page whose path equals the root page's is the
+root page; no filename is hard-coded in the script. Without `data-root`, the
+identity is `location.pathname`.
 
 ## Reading positions and the recent list
 
@@ -212,9 +216,9 @@ opening the root directory page.
 
 ## Security policy and cache busting
 
-- `contentSecurityPolicyWithForm` gains `manifest-src 'self'`, which both
-  the `serve` header and the static build meta tag use. `standaloneCSP` is
-  unchanged.
+- `contentSecurityPolicyWithForm` gains `manifest-src 'self'`, which the
+  `serve` header, the static build meta tag, and `standaloneCSP` all share.
+  The directive is inert in a standalone file, which links no manifest.
 - The popovers and the overlay use no inline styles or scripts, so
   `style-src` and `script-src` stay `'self'`.
 - `serve` bumps the `?v=` query on `app.js` and `style.css`.

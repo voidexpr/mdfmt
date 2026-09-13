@@ -288,6 +288,37 @@ the token is absent from page source and works for nested pages. Disable web
 server directory listings. The opaque path is a secret-link convenience, not
 authentication; use access control when disclosure matters.
 
+### Reading positions, recent documents, and home-screen apps
+
+Every document page remembers where you stopped reading. Opening the same
+document again, from the sidebar, a bookmark, or the recent-documents menu,
+returns to that position. Following a link to a specific heading still jumps
+to that heading, and reload, back, and forward leave scroll restoration to the
+browser. Positions are stored in the browser's `localStorage`, keyed by the
+document's path relative to the site root, so they survive a rebuild with a
+new path token.
+
+The toolbar has two additional buttons next to the theme toggle:
+
+* a recent-documents menu listing the 20 most recently viewed documents,
+  most recent first, with a Clear action; it appears once a second document
+  has been viewed;
+* on narrow screens, an "On this page" button that opens the table of
+  contents as an overlay, since the sidebars are hidden there.
+
+`serve` and `build` also publish a web app manifest, so a served or built site
+can be added to an iOS or Android home screen. Launched from the home screen,
+the app opens the last document read at its saved position; opened as a plain
+URL, the site root shows the directory page as usual. `save` output has no
+manifest and no recent menu, but it restores reading positions and shows the
+table-of-contents button.
+
+For a home-screen install the site must be served over HTTPS, for example
+behind a reverse proxy such as Caddy. An installed app keeps its own cookies
+and storage, separate from the browser, so sign in once inside the app and
+prefer a cookie-based authentication flow with a long-lived session over HTTP
+basic authentication, whose prompt repeats in standalone mode.
+
 ## Syntax highlighting
 
 Fenced code blocks are highlighted from their language label using Chroma's

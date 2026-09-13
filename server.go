@@ -43,7 +43,27 @@ var (
 	favicon32Asset      = mustReadAsset("assets/favicon-32.png")
 	favicon48Asset      = mustReadAsset("assets/favicon-48.png")
 	appleTouchIconAsset = mustReadAsset("assets/apple-touch-icon.png")
+	// Served directory URLs end with a slash while the static build names
+	// index.html explicitly, so each mode gets its own relative start URL.
+	servedManifestAsset = webManifest("../?resume=1")
+	staticManifestAsset = webManifest("../index.html?resume=1")
 )
+
+// webManifest describes the site as an installable home-screen web app. The
+// start URL resolves relative to the manifest's own location beneath the
+// asset directory, so the site root and any path token never appear in it.
+// The resume marker tells app.js that this is a cold launch.
+func webManifest(startURL string) []byte {
+	const manifest = `{
+  "name": "mdfmt",
+  "short_name": "mdfmt",
+  "start_url": %q,
+  "display": "standalone",
+  "icons": [{"src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]
+}
+`
+	return []byte(fmt.Sprintf(manifest, startURL))
+}
 
 func mustReadAsset(name string) []byte {
 	content, err := embeddedFiles.ReadFile(name)
@@ -101,6 +121,8 @@ type pageData struct {
 	Favicon32URL  template.URL
 	Favicon48URL  template.URL
 	AppleIconURL  template.URL
+	ManifestURL   template.URL
+	RootURL       template.URL // the site's root page, relative to this page
 	Projects      []navEntry
 	StaticCSP     string
 }
@@ -320,6 +342,7 @@ func contentSecurityPolicyWithForm(styleSrc, scriptSrc, imgSrc string, frameAnce
 		"style-src " + styleSrc,
 		"script-src " + scriptSrc,
 		"img-src " + imgSrc,
+		"manifest-src 'self'",
 		"object-src 'none'",
 		"base-uri 'none'",
 	}
@@ -351,6 +374,8 @@ func (s *markdownServer) serveAsset(w http.ResponseWriter, r *http.Request) {
 		content, contentType = favicon48Asset, "image/png"
 	case assetPrefix + "apple-touch-icon.png":
 		content, contentType = appleTouchIconAsset, "image/png"
+	case assetPrefix + "manifest.webmanifest":
+		content, contentType = servedManifestAsset, "application/manifest+json"
 	default:
 		http.NotFound(w, r)
 		return
@@ -591,14 +616,16 @@ func (s *markdownServer) setPageAssetURLs(data *pageData, baseDirectory []string
 	assetURL := func(name string) template.URL {
 		return template.URL(s.pageURL(baseDirectory, []string{".mdfmt", name}, false))
 	}
-	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=8")
-	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=7")
+	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=9")
+	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=8")
 	data.FaviconSVGURL = assetURL("favicon.svg")
 	data.FaviconICOURL = assetURL("favicon.ico")
 	data.Favicon16URL = assetURL("favicon-16.png")
 	data.Favicon32URL = assetURL("favicon-32.png")
 	data.Favicon48URL = assetURL("favicon-48.png")
 	data.AppleIconURL = assetURL("apple-touch-icon.png")
+	data.ManifestURL = assetURL("manifest.webmanifest")
+	data.RootURL = template.URL(relativeURL(baseDirectory, nil, true))
 }
 
 func (s *markdownServer) serveRawMarkdown(w http.ResponseWriter, r *http.Request, filename string, info fs.FileInfo) error {

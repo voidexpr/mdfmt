@@ -71,7 +71,7 @@ func TestBuildSingleSourceSite(t *testing.T) {
 	}
 	for _, name := range []string{
 		".mdfmt", "index.html", "README.html", "guide.html", "plans/index.html", "plans/detail.html",
-		"_mdfmt/style.css", "_mdfmt/app.js", "_mdfmt/favicon.svg",
+		"_mdfmt/style.css", "_mdfmt/app.js", "_mdfmt/favicon.svg", "_mdfmt/manifest.webmanifest",
 	} {
 		if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(name))); err != nil {
 			t.Errorf("missing generated %s: %v", name, err)
@@ -81,8 +81,20 @@ func TestBuildSingleSourceSite(t *testing.T) {
 	if !strings.Contains(rootPage, `href="README.html"`) || !strings.Contains(rootPage, `href="plans/index.html"`) {
 		t.Errorf("root directory links were not materialized:\n%s", rootPage)
 	}
+	if !strings.Contains(rootPage, `<html lang="en" data-root="index.html">`) {
+		t.Errorf("root directory page does not announce its site root:\n%s", rootPage)
+	}
+	manifest := mustRead(t, filepath.Join(target, "_mdfmt", "manifest.webmanifest"))
+	if !strings.Contains(manifest, `"start_url": "../index.html?resume=1"`) {
+		t.Errorf("static manifest has an unexpected start URL:\n%s", manifest)
+	}
 	guide := mustRead(t, filepath.Join(target, "guide.html"))
-	for _, want := range []string{`href="README.html"`, `href="plans/index.html"`, `href="_mdfmt/style.css"`, `http-equiv="Content-Security-Policy"`, `name="referrer" content="no-referrer"`} {
+	for _, want := range []string{
+		`href="README.html"`, `href="plans/index.html"`, `href="_mdfmt/style.css"`,
+		`http-equiv="Content-Security-Policy"`, `manifest-src &#39;self&#39;`, `name="referrer" content="no-referrer"`,
+		`<html lang="en" data-root="index.html">`, `<link rel="manifest" href="_mdfmt/manifest.webmanifest">`,
+		`data-toc-toggle`, `data-recent-toggle`,
+	} {
 		if !strings.Contains(guide, want) {
 			t.Errorf("guide does not contain %q:\n%s", want, guide)
 		}
@@ -128,13 +140,20 @@ func TestBuildTokenizedCollection(t *testing.T) {
 		t.Errorf("collection hub has incorrect links or leaked token:\n%s", hub)
 	}
 	document := mustRead(t, filepath.Join(output, "work", "research", "notes.html"))
-	for _, want := range []string{`href="../../_mdfmt/style.css"`, `href="../../index.html"`, `href="../../a/index.html"`, `>a/</span></a>`, `>work/research/</span></a>`} {
+	for _, want := range []string{
+		`href="../../_mdfmt/style.css"`, `href="../../index.html"`, `href="../../a/index.html"`,
+		`>a/</span></a>`, `>work/research/</span></a>`,
+		`<html lang="en" data-root="../../index.html">`, `<link rel="manifest" href="../../_mdfmt/manifest.webmanifest">`,
+	} {
 		if !strings.Contains(document, want) {
 			t.Errorf("nested collection page does not contain %q:\n%s", want, document)
 		}
 	}
 	if strings.Contains(document, token) || strings.Contains(document, first) || strings.Contains(document, second) {
 		t.Errorf("collection page leaked private path information:\n%s", document)
+	}
+	if manifest := mustRead(t, filepath.Join(output, "_mdfmt", "manifest.webmanifest")); strings.Contains(manifest, token) {
+		t.Errorf("static manifest leaked the path token:\n%s", manifest)
 	}
 }
 

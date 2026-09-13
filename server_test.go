@@ -377,7 +377,7 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 	server.pathToken = token
 	server.editor = &editorLauncher{token: "editor-request-token"}
 
-	for _, target := range []string{"/", "/root.md", "/wrong/root.md", "/.mdfmt/style.css"} {
+	for _, target := range []string{"/", "/root.md", "/wrong/root.md", "/.mdfmt/style.css", "/.mdfmt/manifest.webmanifest"} {
 		response := request(t, server, target)
 		if response.Code != http.StatusNotFound {
 			t.Errorf("unprefixed/wrong route %q status = %d, want 404", target, response.Code)
@@ -402,10 +402,12 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 		t.Fatalf("document HTML leaked the path token:\n%s", body)
 	}
 	for _, want := range []string{
-		`href="../../.mdfmt/style.css?v=8"`,
-		`src="../../.mdfmt/app.js?v=7"`,
+		`href="../../.mdfmt/style.css?v=9"`,
+		`src="../../.mdfmt/app.js?v=8"`,
 		`href="../../.mdfmt/favicon.svg" type="image/svg+xml" sizes="any"`,
 		`href="../../.mdfmt/apple-touch-icon.png" sizes="180x180"`,
+		`<link rel="manifest" href="../../.mdfmt/manifest.webmanifest">`,
+		`<html lang="en" data-root="../../">`,
 		`href="../../root.md"`,
 		`href="next.md"`,
 		`href="?raw=1"`,
@@ -842,12 +844,57 @@ func TestSecurityHeadersAndReadOnlyMethods(t *testing.T) {
 	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'none'") {
 		t.Errorf("read-only CSP unexpectedly permits forms: %q", csp)
 	}
+	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "manifest-src 'self'") {
+		t.Errorf("CSP does not allow the web manifest: %q", csp)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("data"))
 	recorder := httptest.NewRecorder()
 	server.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST status = %d, want 405", recorder.Code)
+	}
+}
+
+func TestWebManifestAndReadingPositionMarkup(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "guide.md", "# Guide\n\n## Install\n\nText.\n")
+	writeTestFile(t, root, "plain.md", "Just a paragraph.\n")
+	server := testServer(t, root)
+
+	manifest := request(t, server, "/.mdfmt/manifest.webmanifest")
+	if manifest.Code != http.StatusOK {
+		t.Fatalf("manifest status = %d", manifest.Code)
+	}
+	if got := manifest.Header().Get("Content-Type"); got != "application/manifest+json" {
+		t.Errorf("manifest Content-Type = %q", got)
+	}
+	if body := manifest.Body.String(); !strings.Contains(body, `"start_url": "../?resume=1"`) || !strings.Contains(body, `"display": "standalone"`) {
+		t.Errorf("served manifest has unexpected content:\n%s", body)
+	}
+
+	directory := request(t, server, "/").Body.String()
+	for _, want := range []string{
+		`<html lang="en" data-root="./">`,
+		`<link rel="manifest" href="/.mdfmt/manifest.webmanifest">`,
+		`data-recent-toggle`,
+		`data-recent-menu`,
+	} {
+		if !strings.Contains(directory, want) {
+			t.Errorf("directory page does not contain %q:\n%s", want, directory)
+		}
+	}
+	if strings.Contains(directory, "data-toc-toggle") {
+		t.Errorf("directory page has a table-of-contents button:\n%s", directory)
+	}
+
+	guide := request(t, server, "/guide.md").Body.String()
+	if !strings.Contains(guide, `data-toc-toggle`) || !strings.Contains(guide, `data-recent-toggle`) {
+		t.Errorf("document with headings lacks the toolbar buttons:\n%s", guide)
+	}
+	plain := request(t, server, "/plain.md").Body.String()
+	if strings.Contains(plain, `data-toc-toggle`) {
+		t.Errorf("document without headings has a table-of-contents button:\n%s", plain)
 	}
 }
 
