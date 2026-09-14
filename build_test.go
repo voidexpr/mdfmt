@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -72,6 +73,7 @@ func TestBuildSingleSourceSite(t *testing.T) {
 	for _, name := range []string{
 		".mdfmt", "index.html", "README.html", "guide.html", "plans/index.html", "plans/detail.html",
 		"_mdfmt/style.css", "_mdfmt/app.js", "_mdfmt/favicon.svg", "_mdfmt/manifest.webmanifest",
+		"sw.js", "_mdfmt/offline.html", "_mdfmt/site.json",
 	} {
 		if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(name))); err != nil {
 			t.Errorf("missing generated %s: %v", name, err)
@@ -88,7 +90,29 @@ func TestBuildSingleSourceSite(t *testing.T) {
 	if !strings.Contains(manifest, `"start_url": "../index.html?resume=1"`) {
 		t.Errorf("static manifest has an unexpected start URL:\n%s", manifest)
 	}
+	var index siteIndex
+	if err := json.Unmarshal([]byte(mustRead(t, filepath.Join(target, "_mdfmt", "site.json"))), &index); err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, entry := range index.Entries {
+		kinds[entry.URL] = entry.Kind
+		if entry.Size == 0 {
+			t.Errorf("site index entry %q has no size", entry.URL)
+		}
+	}
+	for route, kind := range map[string]string{"index.html": "page", "guide.html": "page", "plans/index.html": "page", "_mdfmt/style.css": "asset", "sw.js": "asset", "_mdfmt/offline.html": "asset"} {
+		if kinds[route] != kind {
+			t.Errorf("site index kind of %q = %q, want %q", route, kinds[route], kind)
+		}
+	}
+	if _, listed := kinds["_mdfmt/site.json"]; listed {
+		t.Error("site index lists itself")
+	}
 	guide := mustRead(t, filepath.Join(target, "guide.html"))
+	if cacheButton := `data-cache-folder`; !strings.Contains(rootPage, cacheButton) || strings.Contains(guide, cacheButton) {
+		t.Error("folder cache button should be on directory pages only")
+	}
 	for _, want := range []string{
 		`href="README.html"`, `href="plans/index.html"`, `href="_mdfmt/style.css"`,
 		`http-equiv="Content-Security-Policy"`, `manifest-src &#39;self&#39;`, `name="referrer" content="no-referrer"`,

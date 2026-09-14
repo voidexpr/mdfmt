@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -28,6 +29,13 @@ import (
 
 const assetPrefix = "/.mdfmt/"
 
+// The service worker must be served from the site root so its scope covers
+// every page.
+const (
+	serviceWorkerName = "sw.js"
+	serviceWorkerPath = "/" + serviceWorkerName
+)
+
 //go:embed assets/* templates/*
 var embeddedFiles embed.FS
 
@@ -36,7 +44,8 @@ var embeddedFiles embed.FS
 var (
 	pageTemplates       = template.Must(template.New("mdfmt").ParseFS(embeddedFiles, "templates/*.html"))
 	stylesheetAsset     = joinAssets("assets/style.css", "assets/syntax.css")
-	scriptAsset         = mustReadAsset("assets/app.js")
+	scriptAsset         = joinAssets("assets/cache.js", "assets/app.js")
+	serviceWorkerAsset  = joinAssets("assets/cache.js", "assets/sw.js")
 	faviconSVGAsset     = mustReadAsset("assets/favicon.svg")
 	faviconICOAsset     = mustReadAsset("assets/favicon.ico")
 	favicon16Asset      = mustReadAsset("assets/favicon-16.png")
@@ -125,6 +134,7 @@ type pageData struct {
 	RootURL       template.URL // the site's root page, relative to this page
 	Projects      []navEntry
 	StaticCSP     string
+	Offline       bool // the offline fallback page
 }
 
 type breadcrumb struct {
@@ -228,6 +238,10 @@ func (s *markdownServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.URL.Path == serviceWorkerPath {
+		writeAsset(w, r, serviceWorkerAsset, "text/javascript; charset=utf-8")
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, assetPrefix) {
@@ -343,6 +357,7 @@ func contentSecurityPolicyWithForm(styleSrc, scriptSrc, imgSrc string, frameAnce
 		"style-src " + styleSrc,
 		"script-src " + scriptSrc,
 		"img-src " + imgSrc,
+		"connect-src 'self'",
 		"manifest-src 'self'",
 		"object-src 'none'",
 		"base-uri 'none'",
@@ -377,15 +392,110 @@ func (s *markdownServer) serveAsset(w http.ResponseWriter, r *http.Request) {
 		content, contentType = appleTouchIconAsset, "image/png"
 	case assetPrefix + "manifest.webmanifest":
 		content, contentType = servedManifestAsset, "application/manifest+json"
+	case assetPrefix + "site.json":
+		content, contentType = s.siteIndex(), "application/json"
+	case assetPrefix + "offline.html":
+		page, err := s.offlinePage()
+		if err != nil {
+			s.logger.Printf("offline page: %v", err)
+			http.Error(w, "offline page unavailable", http.StatusInternalServerError)
+			return
+		}
+		content, contentType = page, "text/html; charset=utf-8"
 	default:
 		http.NotFound(w, r)
 		return
 	}
+	writeAsset(w, r, content, contentType)
+}
+
+func writeAsset(w http.ResponseWriter, r *http.Request, content []byte, contentType string) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "no-cache")
 	if r.Method == http.MethodGet {
 		_, _ = w.Write(content)
 	}
+}
+
+// siteEntry is one cacheable route of the site, relative to the site root.
+type siteEntry struct {
+	URL    string   `json:"url"`
+	Size   int64    `json:"size"`
+	Kind   string   `json:"kind"` // page, image, or asset
+	Images []string `json:"images,omitempty"`
+}
+
+type siteIndex struct {
+	Generated string      `json:"generated"`
+	Entries   []siteEntry `json:"entries"`
+}
+
+func encodeSiteIndex(generated time.Time, entries []siteEntry) []byte {
+	content, err := json.Marshal(siteIndex{Generated: generated.UTC().Format(time.RFC3339), Entries: entries})
+	if err != nil {
+		panic(fmt.Sprintf("encode site index: %v", err)) // plain strings and integers cannot fail
+	}
+	return content
+}
+
+// siteIndex lists every directory and document page of the served tree so
+// the folder cache button can fetch a whole folder. Images are not listed:
+// finding them would mean rendering every document. An unreadable
+// subdirectory is skipped rather than failing the whole index.
+func (s *markdownServer) siteIndex() []byte {
+	var entries []siteEntry
+	visited := map[string]bool{}
+	var walk func(directory string, components []string)
+	walk = func(directory string, components []string) {
+		resolved, err := filepath.EvalSymlinks(directory)
+		if err != nil || visited[resolved] {
+			return
+		}
+		visited[resolved] = true
+		directories, files, err := s.listDirectory(resolved, components, "", false)
+		if err != nil {
+			s.logger.Printf("site index: skip %s: %v", resolved, err)
+			return
+		}
+		entries = append(entries, siteEntry{URL: siteRoute(components, true), Kind: "page"})
+		for _, file := range files {
+			// index.md redirects to its directory, which is listed already.
+			if strings.EqualFold(file.Name, "index.md") {
+				continue
+			}
+			entries = append(entries, siteEntry{URL: siteRoute(appendComponents(components, file.Name), false), Size: file.SortSize, Kind: "page"})
+		}
+		for _, child := range directories {
+			walk(filepath.Join(resolved, child.Name), appendComponents(components, child.Name))
+		}
+	}
+	walk(s.root, nil)
+	return encodeSiteIndex(time.Now(), entries)
+}
+
+// siteRoute is a root-relative route; the root directory itself is "".
+func siteRoute(components []string, directory bool) string {
+	if len(components) == 0 {
+		return ""
+	}
+	return relativeURL(nil, components, directory)
+}
+
+// offlinePage is the navigation fallback the service worker serves when a
+// page is neither reachable nor cached; app.js fills it with the cached
+// documents.
+func (s *markdownServer) offlinePage() ([]byte, error) {
+	data := offlinePageData()
+	s.setPageAssetURLs(&data, []string{".mdfmt"})
+	var output bytes.Buffer
+	if err := pageTemplates.ExecuteTemplate(&output, "page.html", data); err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
+}
+
+func offlinePageData() pageData {
+	return pageData{Title: "Offline", Directory: "Offline", Breadcrumbs: []breadcrumb{{Name: "Offline"}}, Offline: true}
 }
 
 func requestComponents(u *url.URL) ([]string, error) {
@@ -615,8 +725,8 @@ func (s *markdownServer) setPageAssetURLs(data *pageData, baseDirectory []string
 	assetURL := func(name string) template.URL {
 		return template.URL(s.pageURL(baseDirectory, []string{".mdfmt", name}, false))
 	}
-	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=9")
-	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=8")
+	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=10")
+	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=9")
 	data.FaviconSVGURL = assetURL("favicon.svg")
 	data.FaviconICOURL = assetURL("favicon.ico")
 	data.Favicon16URL = assetURL("favicon-16.png")

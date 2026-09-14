@@ -38,10 +38,10 @@
   const recentLimit = 20;
   const rootPage = root.dataset.root === undefined ? null : new URL(root.dataset.root, location.href);
   const siteRoot = rootPage && new URL("./", rootPage);
-  const identity =
-    siteRoot && location.pathname.startsWith(siteRoot.pathname)
-      ? location.pathname.slice(siteRoot.pathname.length)
-      : location.pathname;
+  // A site route is a path relative to the site root, or null outside it.
+  const siteRoute = (url) =>
+    siteRoot && url.pathname.startsWith(siteRoot.pathname) ? url.pathname.slice(siteRoot.pathname.length) : null;
+  const identity = siteRoute(location) ?? location.pathname;
 
   const loadRecent = () => {
     try {
@@ -59,6 +59,31 @@
     }
   };
   const recordURL = (record) => (siteRoot ? new URL(record.url, siteRoot).href : record.url);
+
+  // The service worker keeps visited pages for offline reading. It lives at
+  // the site root and learns the asset directory from its registration URL.
+  // cache.js, prepended at embed time, provides mdfmtCache for both sides.
+  const cacheName = siteRoot && mdfmtCache.name(siteRoot.pathname);
+  const scriptURL = document.currentScript?.src;
+  const assetDir = scriptURL ? siteRoute(new URL("./", scriptURL)) : null;
+  if (assetDir && "serviceWorker" in navigator) {
+    navigator.serviceWorker
+      .register(new URL(`sw.js?assets=${encodeURIComponent(assetDir)}`, siteRoot), { scope: siteRoot.href })
+      .catch(() => {
+        // Offline support is best-effort; the site works without it.
+      });
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "offline") dispatchEvent(new Event("mdfmt:offline"));
+    });
+  }
+  const decodePath = (path) => {
+    try {
+      return decodeURIComponent(path);
+    } catch {
+      return path;
+    }
+  };
+  const cacheURL = (route) => new URL(mdfmtCache.key(new URL(route, siteRoot)));
 
   // A home-screen app launches at the manifest's start URL, the root page,
   // with a resume marker. Redirecting here, before the body is parsed, aborts
@@ -169,6 +194,154 @@
       registerPopover(tocToggle, tocPanel, (open) => root.classList.toggle("toc-open", open));
     }
 
+    const recent = loadRecent();
+    const offlinePill = document.querySelector("[data-offline-pill]");
+    if (offlinePill) {
+      const setOffline = (offline) => {
+        offlinePill.hidden = !offline;
+      };
+      setOffline(!navigator.onLine);
+      addEventListener("online", () => setOffline(false));
+      addEventListener("offline", () => setOffline(true));
+      addEventListener("mdfmt:offline", () => setOffline(true));
+    }
+
+    // Mirrors humanSize in server.go.
+    const formatSize = (size) => {
+      if (size < 1024) return `${size} B`;
+      let value = size / 1024;
+      let exponent = 0;
+      while (value >= 1024 && exponent < 5) {
+        value /= 1024;
+        exponent += 1;
+      }
+      return `${value.toFixed(1)} ${"KMGTPE"[exponent]}iB`;
+    };
+    const isPageRoute = (route) =>
+      !route.startsWith(assetDir) &&
+      (route === "" || route.endsWith("/") || route.endsWith(".html") || /\.(md|markdown)$/i.test(route));
+    const cachedRoutes = async (cache) => {
+      const routes = new Set();
+      for (const request of await cache.keys()) {
+        const url = cacheURL(request.url);
+        if (url.search) continue;
+        const route = siteRoute(url);
+        if (route !== null) routes.add(route);
+      }
+      return routes;
+    };
+    const navLink = (href, title, detail) => {
+      const link = document.createElement("a");
+      link.className = "nav-entry";
+      link.href = href;
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = title;
+      link.append(name);
+      if (detail) {
+        const span = document.createElement("span");
+        span.className = "detail";
+        span.textContent = detail;
+        link.append(span);
+      }
+      return link;
+    };
+
+    // The offline page lists the cached documents, most recently read first.
+    const offlineList = document.querySelector("[data-offline-list]");
+    if (offlineList && assetDir && "caches" in window) {
+      const from = new URLSearchParams(location.search).get("from");
+      if (from) {
+        document.querySelector("[data-offline-note]").textContent = `${decodePath(from)} is not available offline.`;
+      }
+      caches.open(cacheName).then(async (cache) => {
+        const routes = Array.from(await cachedRoutes(cache)).filter(isPageRoute);
+        const records = new Map(recent.map((record, index) => [siteRoute(cacheURL(record.url)), { index, title: record.title }]));
+        const rank = (route) => records.get(route)?.index ?? recent.length;
+        routes.sort((left, right) => rank(left) - rank(right) || left.localeCompare(right));
+        const fragment = document.createDocumentFragment();
+        for (const route of routes) {
+          fragment.append(navLink(cacheURL(route).href, records.get(route)?.title || decodePath(route) || "Home"));
+        }
+        offlineList.replaceChildren(fragment);
+      });
+    }
+
+    // The folder cache button stores every page below the directory in the
+    // cache itself rather than relying on the service worker's fetch handler,
+    // which does not see requests from an uncontrolled page (a shift-reload
+    // or the first visit); the cached state is always derived from the cache.
+    const cacheButton = document.querySelector("[data-cache-folder]");
+    if (cacheButton && assetDir && "caches" in window) {
+      const label = cacheButton.querySelector("[data-cache-label]");
+      // Every page below this directory plus the images those pages reference.
+      const folderTargets = (index) => {
+        const prefix = siteRoute(cacheURL(new URL("./", location.href).href));
+        const sizes = new Map(index.entries.map((entry) => [siteRoute(cacheURL(entry.url)), entry.size]));
+        const targets = new Set();
+        for (const entry of index.entries) {
+          const route = siteRoute(cacheURL(entry.url));
+          if (entry.kind !== "page" || !route.startsWith(prefix)) continue;
+          targets.add(route);
+          for (const image of entry.images || []) targets.add(siteRoute(cacheURL(image)));
+        }
+        const routes = Array.from(targets);
+        return { routes, total: routes.reduce((sum, route) => sum + (sizes.get(route) || 0), 0) };
+      };
+      (async () => {
+        const index = await fetch(new URL("site.json", new URL(assetDir, siteRoot)))
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null);
+        if (!index) return; // without an index the button stays hidden
+        const { routes, total } = folderTargets(index);
+        const summary = `${routes.length} · ${formatSize(total)}`;
+        const cache = await caches.open(cacheName);
+        const refresh = async () => {
+          const cached = await cachedRoutes(cache);
+          const complete = routes.every((route) => cached.has(route));
+          cacheButton.dataset.state = complete ? "cached" : "cache";
+          label.textContent = complete ? `Offline · ${summary}` : `Cache ${summary}`;
+          cacheButton.hidden = false;
+          return cached;
+        };
+        const cacheFolder = async (cached) => {
+          const queue = routes.filter((route) => !cached.has(route));
+          let done = routes.length - queue.length;
+          const worker = async () => {
+            while (queue.length) {
+              const url = cacheURL(queue.shift());
+              try {
+                const response = await fetch(url);
+                if (mdfmtCache.cacheable(response)) await cache.put(url.href, response);
+              } catch {
+                // A failed fetch leaves the entry for the next attempt.
+              }
+              done += 1;
+              label.textContent = `${done} / ${routes.length}`;
+            }
+          };
+          await Promise.all([worker(), worker(), worker(), worker()]);
+        };
+        const removeFolder = async () => {
+          for (const route of routes) await cache.delete(cacheURL(route).href);
+        };
+        let cached = await refresh();
+        cacheButton.addEventListener("click", async () => {
+          cacheButton.disabled = true;
+          try {
+            if (cacheButton.dataset.state === "cached") {
+              if (confirm(`Remove ${routes.length} cached files from this device?`)) await removeFolder();
+            } else {
+              await cacheFolder(cached);
+            }
+          } finally {
+            cacheButton.disabled = false;
+            cached = await refresh();
+          }
+        });
+      })();
+    }
+
     // On narrow screens the toolbar is fixed to the bottom and its height
     // depends on how the breadcrumbs wrap; the stylesheet reads it to keep
     // the content and the popovers clear of it.
@@ -179,7 +352,6 @@
       }).observe(toolbar);
     }
 
-    const recent = loadRecent();
     const recentToggle = document.querySelector("[data-recent-toggle]");
     const recentMenu = document.querySelector("[data-recent-menu]");
     if (recentToggle && recentMenu) {
@@ -190,17 +362,7 @@
       const fill = () => {
         recentMenu.replaceChildren();
         for (const record of others(loadRecent())) {
-          const link = document.createElement("a");
-          link.className = "nav-entry";
-          link.href = recordURL(record);
-          const title = document.createElement("span");
-          title.className = "name";
-          title.textContent = record.title || record.url;
-          const age = document.createElement("span");
-          age.className = "detail";
-          age.textContent = relativeAge(record.updated, true);
-          link.append(title, age);
-          recentMenu.append(link);
+          recentMenu.append(navLink(recordURL(record), record.title || record.url, relativeAge(record.updated, true)));
         }
         const clear = document.createElement("button");
         clear.type = "button";

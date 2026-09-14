@@ -90,12 +90,12 @@ reach everything that was cached even if they land on an uncached URL.
 
 ## Online state in the UI
 
-When a page was served from the cache the reader should know. The worker
-adds an `X-Mdfmt-Cache: fallback` header to cached responses it serves as a
-fallback; `app.js` cannot read its own document's response headers, so
-instead the page checks `navigator.onLine` at load and on the `online` and
-`offline` events and shows a small "Offline" pill in the toolbar next to
-the age. The pill is informational only; navigation keeps working through
+When a page was served from the cache the reader should know. A page
+cannot read its own response headers, and `navigator.onLine` is not
+reliable, so the worker posts an `offline` message to the client it served
+a cached navigation to, and the page shows a small "Offline" pill in the
+toolbar on that message and on the `offline` event, hiding it again on
+`online`. The pill is informational only; navigation keeps working through
 the cache.
 
 ## Cache a folder

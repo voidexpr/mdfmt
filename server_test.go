@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -377,7 +378,7 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 	server.pathToken = token
 	server.editor = &editorLauncher{token: "editor-request-token"}
 
-	for _, target := range []string{"/", "/root.md", "/wrong/root.md", "/.mdfmt/style.css", "/.mdfmt/manifest.webmanifest"} {
+	for _, target := range []string{"/", "/root.md", "/wrong/root.md", "/.mdfmt/style.css", "/.mdfmt/manifest.webmanifest", "/sw.js"} {
 		response := request(t, server, target)
 		if response.Code != http.StatusNotFound {
 			t.Errorf("unprefixed/wrong route %q status = %d, want 404", target, response.Code)
@@ -402,8 +403,8 @@ func TestPathTokenRoutingAndHTMLPrivacy(t *testing.T) {
 		t.Fatalf("document HTML leaked the path token:\n%s", body)
 	}
 	for _, want := range []string{
-		`href="../../.mdfmt/style.css?v=9"`,
-		`src="../../.mdfmt/app.js?v=8"`,
+		`href="../../.mdfmt/style.css?v=10"`,
+		`src="../../.mdfmt/app.js?v=9"`,
 		`href="../../.mdfmt/favicon.svg" type="image/svg+xml" sizes="any"`,
 		`href="../../.mdfmt/apple-touch-icon.png" sizes="180x180"`,
 		`<link rel="manifest" href="../../.mdfmt/manifest.webmanifest">`,
@@ -847,6 +848,9 @@ func TestSecurityHeadersAndReadOnlyMethods(t *testing.T) {
 	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "manifest-src 'self'") {
 		t.Errorf("CSP does not allow the web manifest: %q", csp)
 	}
+	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self'") {
+		t.Errorf("CSP does not allow same-origin fetches from the page: %q", csp)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("data"))
 	recorder := httptest.NewRecorder()
@@ -910,6 +914,70 @@ func TestWebManifestAndReadingPositionMarkup(t *testing.T) {
 	plain := request(t, server, "/plain.md").Body.String()
 	if strings.Contains(plain, `data-toc-toggle`) {
 		t.Errorf("document without headings has a table-of-contents button:\n%s", plain)
+	}
+}
+
+func TestServiceWorkerSiteIndexAndOfflinePage(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "guide.md", "# Guide\n")
+	writeTestFile(t, filepath.Join(root, "notes"), "todo.md", "# Todo\n")
+	writeTestFile(t, filepath.Join(root, "notes"), "index.md", "# Notes\n")
+	server := testServer(t, root)
+
+	worker := request(t, server, "/sw.js")
+	if worker.Code != http.StatusOK || worker.Header().Get("Content-Type") != "text/javascript; charset=utf-8" || !bytes.Equal(worker.Body.Bytes(), serviceWorkerAsset) {
+		t.Errorf("service worker: status=%d type=%q", worker.Code, worker.Header().Get("Content-Type"))
+	}
+	if csp := worker.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self'") {
+		t.Errorf("service worker CSP blocks its own fetches: %q", csp)
+	}
+
+	index := request(t, server, "/.mdfmt/site.json")
+	if index.Code != http.StatusOK || index.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("site index: status=%d type=%q", index.Code, index.Header().Get("Content-Type"))
+	}
+	var decoded siteIndex
+	if err := json.Unmarshal(index.Body.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	routes := map[string]siteEntry{}
+	for _, entry := range decoded.Entries {
+		routes[entry.URL] = entry
+	}
+	for _, want := range []string{"", "guide.md", "notes/", "notes/todo.md"} {
+		if entry, ok := routes[want]; !ok || entry.Kind != "page" {
+			t.Errorf("site index lacks page %q: %+v", want, decoded.Entries)
+		}
+	}
+	if routes["guide.md"].Size != int64(len("# Guide\n")) {
+		t.Errorf("guide.md size = %d", routes["guide.md"].Size)
+	}
+	if _, listed := routes["notes/index.md"]; listed {
+		t.Error("site index lists index.md, which redirects to its directory")
+	}
+	if strings.Contains(index.Body.String(), root) {
+		t.Errorf("site index leaked the root path:\n%s", index.Body.String())
+	}
+
+	offline := request(t, server, "/.mdfmt/offline.html")
+	if offline.Code != http.StatusOK {
+		t.Fatalf("offline page status = %d", offline.Code)
+	}
+	for _, want := range []string{`data-root="../"`, `data-offline-list`, `href="/.mdfmt/style.css?v=10"`, `<title>Offline · mdfmt</title>`} {
+		if !strings.Contains(offline.Body.String(), want) {
+			t.Errorf("offline page lacks %q:\n%s", want, offline.Body.String())
+		}
+	}
+	if strings.Contains(offline.Body.String(), "data-cache-folder") {
+		t.Errorf("offline page has a folder cache button")
+	}
+
+	server.pathToken = "tok"
+	if prefixed := request(t, server, "/tok/sw.js"); prefixed.Code != http.StatusOK {
+		t.Errorf("prefixed service worker status = %d", prefixed.Code)
+	}
+	if prefixed := request(t, server, "/tok/.mdfmt/offline.html"); !strings.Contains(prefixed.Body.String(), `data-root="../"`) {
+		t.Errorf("prefixed offline page does not use a relative root:\n%s", prefixed.Body.String())
 	}
 }
 

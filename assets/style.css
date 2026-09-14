@@ -244,7 +244,8 @@ main {
 .edit-button,
 .theme-button,
 .menu-button,
-.menu-clear {
+.menu-clear,
+.cache-button {
   display: inline-flex;
   gap: .3rem;
   align-items: center;
@@ -273,6 +274,8 @@ main {
 
 .raw-link:hover,
 .raw-link:focus-visible,
+.cache-button:hover,
+.cache-button:focus-visible,
 .edit-button:hover,
 .edit-button:focus-visible,
 .theme-button:hover,
@@ -286,6 +289,23 @@ main {
   color: var(--accent);
   text-decoration: none;
 }
+
+.cache-button { color: var(--muted); }
+.cache-button[data-state="cached"] { border-color: var(--accent); color: var(--accent); }
+.cache-button:disabled { cursor: progress; }
+
+.offline-pill {
+  border-radius: 999px;
+  background: var(--accent-soft);
+  padding: 0 .55rem;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+
+.offline-view { padding: .5rem 0; }
+.offline-note { color: var(--muted); }
 
 .page-menu {
   display: flex;
@@ -550,13 +570,15 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   .edit-button,
   .theme-button,
   .menu-button,
-  .menu-clear {
+  .menu-clear,
+  .cache-button {
     height: 2.5rem;
     border-radius: 6px;
     font-size: 13px;
   }
   .raw-link,
-  .edit-button { padding: 0 .7rem; }
+  .edit-button,
+  .cache-button { padding: 0 .7rem; }
   .theme-button,
   .menu-button {
     justify-content: center;

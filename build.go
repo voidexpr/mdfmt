@@ -48,6 +48,7 @@ type buildDocument struct {
 	source     []byte
 	title      string
 	output     []string
+	images     []string // root-relative media routes the page references
 }
 
 type buildDiagnostics struct {
@@ -177,6 +178,9 @@ func buildStaticSite(cfg buildConfig, warningOutput io.Writer) (string, error) {
 	for _, warning := range builder.diagnostics.warnings {
 		fmt.Fprintf(warningOutput, "mdfmt: warning: %s\n", warning)
 	}
+	if err := builder.writeSiteIndex(); err != nil {
+		return "", err
+	}
 	if err := publishBuildTarget(target, workRoot); err != nil {
 		return "", err
 	}
@@ -231,13 +235,19 @@ func resolveBuildMounts(cfg buildConfig) ([]*buildMount, error) {
 	return mounts, nil
 }
 
+// isReservedBuildName reports whether a name collides with a file or
+// directory the build writes at the site root.
+func isReservedBuildName(name string) bool {
+	return strings.EqualFold(name, "_mdfmt") || strings.EqualFold(name, serviceWorkerName)
+}
+
 func validateBuildMountPath(name string) ([]string, error) {
 	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.Contains(name, "//") {
 		return nil, fmt.Errorf("invalid mount path %q", name)
 	}
 	components := strings.Split(name, "/")
 	for _, component := range components {
-		if component == "" || component == "." || component == ".." || strings.EqualFold(component, "_mdfmt") || strings.ContainsAny(component, "\\\x00") {
+		if component == "" || component == "." || component == ".." || isReservedBuildName(component) || strings.ContainsAny(component, "\\\x00") {
 			return nil, fmt.Errorf("invalid mount path %q", name)
 		}
 	}
@@ -338,8 +348,8 @@ func (b *staticSiteBuilder) inventoryMount(mount *buildMount) error {
 				return nil, fmt.Errorf("%s: directory names %q and %q collide case-insensitively", b.sourceLabel(mount, rel), previous, name)
 			}
 			seenChildren[folded] = name
-			if !b.collection && len(rel) == 0 && strings.EqualFold(name, "_mdfmt") {
-				return nil, errors.New("source directory _mdfmt conflicts with the reserved build asset namespace")
+			if !b.collection && len(rel) == 0 && isReservedBuildName(name) {
+				return nil, fmt.Errorf("source directory %s conflicts with a reserved build path", name)
 			}
 		}
 		return directory, nil
@@ -455,7 +465,56 @@ func (b *staticSiteBuilder) writeAssets() error {
 			return fmt.Errorf("write asset %s: %w", asset.name, err)
 		}
 	}
-	return nil
+	if err := writeBuildFile(filepath.Join(b.siteRoot, serviceWorkerName), serviceWorkerAsset); err != nil {
+		return fmt.Errorf("write service worker: %w", err)
+	}
+	base := []string{"_mdfmt"}
+	data := offlinePageData()
+	data.StaticCSP = staticBuildCSP()
+	b.setStaticAssetURLs(&data, base)
+	return b.writePage(appendComponents(base, "offline.html"), data)
+}
+
+// writeSiteIndex lists every generated file with its size, plus the images
+// each page references, once all pages exist. It runs last so the sizes are
+// exact.
+func (b *staticSiteBuilder) writeSiteIndex() error {
+	images := make(map[string][]string)
+	for _, mount := range b.mounts {
+		for _, document := range mount.documents {
+			if len(document.images) > 0 {
+				images[strings.Join(document.output, "/")] = document.images
+			}
+		}
+	}
+	var entries []siteEntry
+	err := filepath.WalkDir(b.siteRoot, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		rel, err := filepath.Rel(b.siteRoot, path)
+		if err != nil {
+			return err
+		}
+		raw := filepath.ToSlash(rel)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		kind := "page"
+		switch {
+		case strings.HasPrefix(raw, "_mdfmt/media/"):
+			kind = "image"
+		case strings.HasPrefix(raw, "_mdfmt/"), raw == serviceWorkerName:
+			kind = "asset"
+		}
+		entries = append(entries, siteEntry{URL: siteRoute(strings.Split(raw, "/"), false), Size: info.Size(), Kind: kind, Images: images[raw]})
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("index site: %w", err)
+	}
+	return writeBuildFile(filepath.Join(b.siteRoot, "_mdfmt", "site.json"), encodeSiteIndex(b.now, entries))
 }
 
 func (b *staticSiteBuilder) writeCollectionHub() error {
@@ -550,19 +609,13 @@ func (b *staticSiteBuilder) rewriteDestination(document *buildDocument, base []s
 	}
 
 	var rewritten string
-	if image {
+	if image || (len(components) > 0 && isImageName(components[len(components)-1])) {
 		assetRoute, ok := b.copyReferencedImage(document.mount, components)
 		if !ok {
-			b.diagnostics.warn("%s: unavailable local image %q", b.sourceLabel(document.mount, document.rel), raw)
+			b.diagnostics.warn("%s: unavailable image %q", b.sourceLabel(document.mount, document.rel), raw)
 			return destination
 		}
-		rewritten = relativeURL(base, assetRoute, false)
-	} else if len(components) > 0 && isImageName(components[len(components)-1]) {
-		assetRoute, ok := b.copyReferencedImage(document.mount, components)
-		if !ok {
-			b.diagnostics.warn("%s: unavailable linked image %q", b.sourceLabel(document.mount, document.rel), raw)
-			return destination
-		}
+		document.images = append(document.images, relativeURL(nil, assetRoute, false))
 		rewritten = relativeURL(base, assetRoute, false)
 	} else if targetDirectory := document.mount.directories[componentKey(components)]; targetDirectory != nil {
 		rewritten = staticDirectoryURL(base, concatComponents(document.mount.components, targetDirectory.rel))
