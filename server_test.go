@@ -897,6 +897,7 @@ func TestWebManifestAndReadingPositionMarkup(t *testing.T) {
 		t.Errorf("document with headings lacks the toolbar buttons:\n%s", guide)
 	}
 	for _, want := range []string{
+		`data-nav-toggle`,
 		`data-sidebar-sort`,
 		`<button type="button" data-sort-key="modified"`,
 		`<nav data-file-list>`,

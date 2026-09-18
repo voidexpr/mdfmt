@@ -21,6 +21,7 @@
 {{define "icon-file"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5l3.5 3.5v9.5a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-12.5a.5.5 0 0 1 .5-.5z"/><path d="M9 1.5V5h3.5"/></svg>{{end}}
 {{define "icon-back"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>{{end}}
 {{define "icon-toc"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>{{end}}
+{{define "icon-sidebar"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg>{{end}}
 {{define "icon-recent"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>{{end}}
 {{define "icon-size"}}<svg class="icon" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 13.5v-3M8 13.5v-7M12.5 13.5V2.5"/></svg>{{end}}
 {{define "sort-control"}}<span class="sort-control" role="group" aria-label="Sort files" data-sidebar-sort><button type="button" data-sort-key="modified" aria-pressed="false" title="Most recent first" aria-label="Most recent first">{{template "icon-recent"}}</button><button type="button" data-sort-key="name" aria-pressed="false" title="Alphabetical" aria-label="Alphabetical"><span class="glyph">Az</span></button><button type="button" data-sort-key="size" aria-pressed="false" title="Largest first" aria-label="Largest first">{{template "icon-size"}}</button></span>{{end}}
@@ -154,6 +155,7 @@
       <div class="pane-head">
         {{$root := ""}}{{range .Breadcrumbs}}{{if .URL}}{{if not $root}}{{$root = .URL}}{{end}}{{end}}{{end}}
         {{if $root}}<a class="brand" href="{{$root}}">{{template "logo"}}</a>{{else}}<span class="brand">{{template "logo"}}</span>{{end}}
+        <button class="nav-toggle" type="button" data-nav-toggle aria-expanded="true" aria-label="Hide the sidebar" title="Hide the sidebar">{{template "icon-sidebar"}}</button>
       </div>
       {{if .Projects}}
       <div class="sidebar-title">Projects</div>

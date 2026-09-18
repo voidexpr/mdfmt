@@ -30,6 +30,62 @@
   // Runs before the body is parsed so the page never paints in the wrong theme.
   applyTheme(savedTheme());
 
+  // A JSON setting kept in localStorage with a path-wide cookie fallback,
+  // so it survives when one of the two is unavailable.
+  const persistedSetting = (storageKey, cookieKey) => ({
+    load: () => {
+      try {
+        const value = JSON.parse(localStorage.getItem(storageKey));
+        if (value) return value;
+      } catch {
+        // Try the cookie below.
+      }
+      try {
+        const prefix = `${cookieKey}=`;
+        const cookie = document.cookie
+          .split(";")
+          .map((part) => part.trim())
+          .find((part) => part.startsWith(prefix));
+        if (!cookie) return null;
+        const serialized = decodeURIComponent(cookie.slice(prefix.length));
+        const value = JSON.parse(serialized);
+        localStorage.setItem(storageKey, serialized);
+        return value;
+      } catch {
+        return null;
+      }
+    },
+    save: (value) => {
+      const serialized = JSON.stringify(value);
+      try {
+        localStorage.setItem(storageKey, serialized);
+      } catch {
+        // Fall through to the path-wide cookie.
+      }
+      try {
+        document.cookie =
+          `${cookieKey}=${encodeURIComponent(serialized)}; Path=/; ` +
+          "Max-Age=31536000; SameSite=Lax";
+      } catch {
+        // The setting still applies to this page when storage is disabled.
+      }
+    },
+  });
+
+  // The left sidebar collapses to a narrow rail; the state is applied here
+  // as well so the layout never paints expanded first.
+  const navSetting = persistedSetting("mdfmt.sidebar", "mdfmt_sidebar");
+  const applyNavCollapsed = (collapsed) => {
+    root.classList.toggle("nav-collapsed", collapsed);
+    const label = collapsed ? "Show the sidebar" : "Hide the sidebar";
+    for (const button of document.querySelectorAll("[data-nav-toggle]")) {
+      button.setAttribute("aria-expanded", String(!collapsed));
+      button.title = label;
+      button.setAttribute("aria-label", label);
+    }
+  };
+  applyNavCollapsed(navSetting.load() === "collapsed");
+
   // Reading positions live in one list of the most recently viewed documents.
   // The page announces its root page (the directory page in serve, index.html
   // in a build). A document is identified by its path relative to the root
@@ -118,6 +174,15 @@
         } catch {
           // The choice still applies to this page when storage is unavailable.
         }
+      });
+    }
+
+    applyNavCollapsed(root.classList.contains("nav-collapsed"));
+    for (const button of document.querySelectorAll("[data-nav-toggle]")) {
+      button.addEventListener("click", () => {
+        const collapsed = !root.classList.contains("nav-collapsed");
+        applyNavCollapsed(collapsed);
+        navSetting.save(collapsed ? "collapsed" : "expanded");
       });
     }
 
@@ -493,47 +558,6 @@
       addEventListener("pagehide", savePosition);
     }
 
-    // A JSON setting kept in localStorage with a path-wide cookie fallback,
-    // so it survives when one of the two is unavailable.
-    const persistedSetting = (storageKey, cookieKey) => ({
-      load: () => {
-        try {
-          const value = JSON.parse(localStorage.getItem(storageKey));
-          if (value) return value;
-        } catch {
-          // Try the cookie below.
-        }
-        try {
-          const prefix = `${cookieKey}=`;
-          const cookie = document.cookie
-            .split(";")
-            .map((part) => part.trim())
-            .find((part) => part.startsWith(prefix));
-          if (!cookie) return null;
-          const serialized = decodeURIComponent(cookie.slice(prefix.length));
-          const value = JSON.parse(serialized);
-          localStorage.setItem(storageKey, serialized);
-          return value;
-        } catch {
-          return null;
-        }
-      },
-      save: (value) => {
-        const serialized = JSON.stringify(value);
-        try {
-          localStorage.setItem(storageKey, serialized);
-        } catch {
-          // Fall through to the path-wide cookie.
-        }
-        try {
-          document.cookie =
-            `${cookieKey}=${encodeURIComponent(serialized)}; Path=/; ` +
-            "Max-Age=31536000; SameSite=Lax";
-        } catch {
-          // The setting still applies to this page when storage is disabled.
-        }
-      },
-    });
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
     const compare = (left, right, key) => {
       if (key === "name") return collator.compare(left.dataset.name, right.dataset.name);

@@ -54,14 +54,21 @@ a:hover { text-decoration: underline; }
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(12rem, 19.2rem) minmax(0, 56rem) minmax(11rem, 18rem);
-  gap: 2.25rem;
+  grid-template-columns: minmax(11rem, 16rem) minmax(0, 58rem) minmax(11rem, 18rem);
+  gap: 1rem;
   justify-content: center;
   min-height: 100vh;
   padding: 0 1.5rem;
 }
 
-.layout.no-nav { grid-template-columns: minmax(0, 56rem) minmax(11rem, 18rem); }
+.layout.no-nav { grid-template-columns: minmax(0, 58rem) minmax(11rem, 18rem); }
+
+/* The left sidebar collapses to a rail holding only the toggle. The class
+   is set before the body is parsed so the page never paints expanded first. */
+html.nav-collapsed .layout { grid-template-columns: 2.25rem minmax(0, 58rem) minmax(11rem, 18rem); }
+html.nav-collapsed .left-sidebar > :not(.pane-head),
+html.nav-collapsed .left-sidebar .brand { display: none; }
+html.nav-collapsed .left-sidebar .pane-head { justify-content: center; border-bottom: 0; padding: 0; }
 
 .left-sidebar,
 .right-sidebar {
@@ -99,6 +106,24 @@ a:hover { text-decoration: underline; }
 .logo-green { fill: var(--logo-green); }
 .logo-blue { fill: var(--logo-blue); }
 .logo-text { fill: currentColor; }
+
+.nav-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  appearance: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  padding: 0;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.nav-toggle:hover,
+.nav-toggle:focus-visible { background: var(--hover); color: var(--accent); }
 
 .sidebar-title {
   display: flex;
@@ -329,7 +354,7 @@ main {
 .menu-clear { margin: .25rem .35rem 0; justify-content: center; color: var(--muted); }
 
 article {
-  max-width: 52rem;
+  max-width: 55rem;
   padding: 1.1rem 1.5rem 3rem;
 }
 
@@ -535,7 +560,7 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   color: var(--muted);
 }
 
-.toc { padding: 0 .35rem; }
+.toc { padding: 0 .35rem 0 0; }
 
 .toc ul {
   margin: 0;

@@ -302,7 +302,9 @@ The left sidebar lists the current folder's documents with their age. A
 small control in the folder heading sorts them by most recent first, the
 default, alphabetically, or largest first; the choice is remembered in the
 browser, separately from the directory listing's own sort. Hovering an entry
-shows its filename, title, modification date, age, and size.
+shows its filename, title, modification date, age, and size. The button next
+to the logo collapses the sidebar to a narrow rail, leaving more room for the
+document; the choice is remembered in the browser too.
 
 The toolbar has two additional buttons next to the theme toggle:
 
