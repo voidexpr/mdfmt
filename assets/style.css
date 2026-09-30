@@ -538,6 +538,7 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+.directory-table .age-short { display: none; }
 .directory-table .size,
 .directory-table .size-heading { text-align: right; }
 .directory-table .document-title {
@@ -655,6 +656,56 @@ th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
   .page-meta { flex: 1 1 auto; white-space: normal; }
   .page-meta time { cursor: pointer; }
   .page-meta:not(.show-detail) .meta-detail { display: none; }
+
+  /* The directory table becomes a two-line list: the name, wrapping rather
+     than truncating, beside the compact age, then the full date and the
+     size. The header keeps only its sort buttons. */
+  .directory-table-wrap { overflow-x: visible; }
+  .directory-table,
+  .directory-table thead,
+  .directory-table tbody { display: block; min-width: 0; }
+  .directory-table colgroup,
+  .directory-table th:not(:has(button)),
+  .directory-table .document-title,
+  .directory-table .edit-action,
+  .directory-table .age-long { display: none; }
+  .directory-table thead tr {
+    display: flex;
+    gap: 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    padding: 0 .75rem;
+  }
+  .directory-table th {
+    display: flex;
+    align-items: center;
+    height: 2.25rem;
+    border: 0;
+    padding: 0;
+  }
+  .directory-table th button { height: 100%; }
+  .directory-table .size-heading { margin-left: auto; }
+  /* The name link's ::after covers the row, so the whole row is the tap
+     target. */
+  .directory-table tbody tr {
+    display: grid;
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .1rem .75rem;
+    align-items: baseline;
+    border-bottom: 1px solid var(--row-border);
+    padding: .45rem .75rem;
+  }
+  .directory-table td { height: auto; border: 0; padding: 0; }
+  .directory-table tbody tr:hover { background: var(--accent-faint); }
+  .directory-table .filename { grid-area: 1 / 1; overflow: visible; white-space: normal; }
+  .directory-table .filename a { display: flex; align-items: flex-start; overflow-wrap: anywhere; }
+  .directory-table .filename a::after { content: ""; position: absolute; inset: 0; }
+  .directory-table .filename .icon { margin-top: .25rem; }
+  .directory-table .ago { grid-area: 1 / 2; text-align: right; }
+  .directory-table .age-short { display: inline; }
+  .directory-table .modified { grid-area: 2 / 1; padding-left: calc(14px + .45rem); }
+  .directory-table .size { grid-area: 2 / 2; }
 
   .toc-button { display: inline-flex; }
   html.toc-open .right-sidebar {

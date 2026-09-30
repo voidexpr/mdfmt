@@ -883,6 +883,8 @@ func TestWebManifestAndReadingPositionMarkup(t *testing.T) {
 		`<link rel="manifest" href="/.mdfmt/manifest.webmanifest">`,
 		`data-recent-toggle`,
 		`data-recent-menu`,
+		`<time class="age-long" datetime="`,
+		`<time class="age-short" datetime="`,
 	} {
 		if !strings.Contains(directory, want) {
 			t.Errorf("directory page does not contain %q:\n%s", want, directory)

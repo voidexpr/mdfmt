@@ -314,6 +314,11 @@ The toolbar has two additional buttons next to the theme toggle:
 * on narrow screens, an "On this page" button that opens the table of
   contents as an overlay, since the sidebars are hidden there.
 
+On narrow screens the directory listing becomes a two-line list: the full
+name beside a compact age, then the modification date and the size, with the
+whole row as the tap target. The document title and the Edit button are left
+out there.
+
 `serve` and `build` also publish a web app manifest, so a served or built site
 can be added to an iOS or Android home screen. Launched from the home screen,
 the app opens the last document read at its saved position; opened as a plain
