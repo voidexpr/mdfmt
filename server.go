@@ -162,6 +162,11 @@ type navEntry struct {
 	Edit         *editAction
 }
 
+// HasTitle reports whether the title says more than the file name does.
+func (e navEntry) HasTitle() bool {
+	return e.Title != e.Name && e.Title != stem(e.Name)
+}
+
 // setModified fills the display and sort fields derived from an entry's
 // modification time.
 func (e *navEntry) setModified(modTime, now time.Time) {
@@ -647,7 +652,7 @@ func (s *markdownServer) serveMarkdownPage(w http.ResponseWriter, r *http.Reques
 	if !directoryInfo.IsDir() {
 		return &routeError{status: http.StatusNotFound, err: errors.New("not found")}
 	}
-	directories, files, err := s.listDirectory(directory, directoryComponents, components[len(components)-1], false)
+	directories, files, err := s.listDirectory(directory, directoryComponents, components[len(components)-1], true)
 	if err != nil {
 		return err
 	}

@@ -907,8 +907,10 @@ func TestWebManifestAndReadingPositionMarkup(t *testing.T) {
 		`data-name="plain.md"`,
 		`data-modified="`,
 		`data-size="18"`,
-		`class="detail age"`,
-		`class="detail size"`,
+		`<span class="name">guide.md</span><span class="title">Guide</span>`,
+		`<span class="name">plain.md</span><span class="detail">`,
+		`<time class="age"`,
+		`<span class="size">`,
 	} {
 		if !strings.Contains(guide, want) {
 			t.Errorf("sidebar entry lacks %q:\n%s", want, guide)

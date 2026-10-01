@@ -163,8 +163,8 @@ html.nav-collapsed .left-sidebar .pane-head { justify-content: center; border-bo
 .sort-control button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
 /* The entry detail follows the sort: size when sorting by size, else age. */
-[data-file-list]:not([data-sort="size"]) .detail.size,
-[data-file-list][data-sort="size"] .detail.age { display: none; }
+[data-file-list]:not([data-sort="size"]) .detail .size,
+[data-file-list][data-sort="size"] .detail .age { display: none; }
 
 .nav-entry {
   display: flex;
@@ -184,6 +184,19 @@ html.nav-collapsed .left-sidebar .pane-head { justify-content: center; border-bo
 .nav-entry .detail { color: var(--faint); font-family: var(--mono); font-size: 11px; }
 
 .nav-entry:hover { background: var(--hover); color: var(--text); text-decoration: none; }
+
+/* A file entry stacks its name, title and modification detail so each
+   string gets the full width of the sidebar. */
+.nav-entry.file { align-items: flex-start; height: auto; padding: .2rem .4rem; line-height: 1.35; }
+.nav-entry.file .icon { margin-top: .15rem; }
+.entry-lines { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.entry-lines > * { overflow: hidden; text-overflow: ellipsis; }
+.nav-entry.file:not(.active) .name { color: var(--text); font-weight: 500; }
+.nav-entry.file .title { color: var(--muted); font-weight: 400; }
+.nav-entry.file .detail { font-family: inherit; font-weight: 400; }
+.nav-entry.file .detail > * + *::before { color: var(--faint); content: " · "; font-weight: 400; }
+.nav-entry.file .detail .age,
+.nav-entry.file .detail .size { color: var(--text-secondary); font-weight: 500; }
 
 .nav-entry.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav-entry.active .icon { color: var(--accent); }

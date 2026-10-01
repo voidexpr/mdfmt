@@ -298,11 +298,14 @@ browser. Positions are stored in the browser's `localStorage`, keyed by the
 document's path relative to the site root, so they survive a rebuild with a
 new path token.
 
-The left sidebar lists the current folder's documents with their age. A
-small control in the folder heading sorts them by most recent first, the
-default, alphabetically, or largest first; the choice is remembered in the
-browser, separately from the directory listing's own sort. Hovering an entry
-shows its filename, title, modification date, age, and size. The button next
+The left sidebar stays in view while the document scrolls and lists the
+current folder's documents on up to three lines each: the filename, the
+title when it says more than the filename, and the modification date with
+the age, or with the size when sorting by size. A small control in the
+folder heading sorts them by most recent first, the default, alphabetically,
+or largest first; the choice is remembered in the browser, separately from
+the directory listing's own sort. Hovering an entry shows its filename,
+title, modification date, age, and size. The button next
 to the logo collapses the sidebar to a narrow rail, leaving more room for the
 document; the choice is remembered in the browser too.
 
