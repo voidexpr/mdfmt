@@ -1128,3 +1128,51 @@ func entryNames(entries []navEntry) string {
 func errorsAs(err error, target any) bool {
 	return errors.As(err, target)
 }
+
+func TestMermaidDiagramPages(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "diagram.md", "# Flow\n\n```mermaid\nflowchart LR\n    A --> B\n```\n")
+	writeTestFile(t, root, "plain.md", "```go\nfmt.Println()\n```\n")
+	server := testServer(t, root)
+
+	diagram := request(t, server, "/diagram.md")
+	body := diagram.Body.String()
+	for _, want := range []string{
+		`<pre class="mermaid">flowchart LR` + "\n    A --&gt; B\n</pre>",
+		`<script src="/.mdfmt/mermaid.js?v=` + staticAssets["mermaid.js"].version + `" defer></script>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("diagram page lacks %q:\n%s", want, body)
+		}
+	}
+	if csp := diagram.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "style-src 'self' 'unsafe-inline';") {
+		t.Errorf("diagram page does not allow inline styles: %q", csp)
+	}
+
+	plain := request(t, server, "/plain.md")
+	if body := plain.Body.String(); strings.Contains(body, "mermaid") {
+		t.Errorf("plain page references Mermaid:\n%s", body)
+	}
+	if csp := plain.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "style-src 'self';") {
+		t.Errorf("plain page relaxed its policy: %q", csp)
+	}
+
+	asset := request(t, server, "/.mdfmt/mermaid.js")
+	if asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "text/javascript; charset=utf-8" {
+		t.Errorf("mermaid asset status = %d, type = %q", asset.Code, asset.Header().Get("Content-Type"))
+	}
+	if !bytes.Equal(asset.Body.Bytes(), mermaidAsset) {
+		t.Error("mermaid asset body differs from the embedded bundle")
+	}
+	etag := asset.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("mermaid asset has no ETag")
+	}
+	req := httptest.NewRequest(http.MethodGet, "/.mdfmt/mermaid.js", nil)
+	req.Header.Set("If-None-Match", etag)
+	revalidated := httptest.NewRecorder()
+	server.ServeHTTP(revalidated, req)
+	if revalidated.Code != http.StatusNotModified || revalidated.Body.Len() != 0 {
+		t.Errorf("revalidation status = %d with %d body bytes, want 304 and none", revalidated.Code, revalidated.Body.Len())
+	}
+}

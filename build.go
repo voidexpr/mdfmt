@@ -49,6 +49,7 @@ type buildDocument struct {
 	title      string
 	output     []string
 	images     []string // root-relative media routes the page references
+	mermaid    bool     // the page has diagrams and needs the Mermaid asset
 }
 
 type buildDiagnostics struct {
@@ -452,6 +453,7 @@ func (b *staticSiteBuilder) writeAssets() error {
 	}{
 		{"style.css", stylesheetAsset},
 		{"app.js", scriptAsset},
+		{"mermaid.js", mermaidAsset},
 		{"favicon.svg", faviconSVGAsset},
 		{"favicon.ico", faviconICOAsset},
 		{"favicon-16.png", favicon16Asset},
@@ -470,7 +472,7 @@ func (b *staticSiteBuilder) writeAssets() error {
 	}
 	base := []string{"_mdfmt"}
 	data := offlinePageData()
-	data.StaticCSP = staticBuildCSP()
+	data.StaticCSP = staticBuildCSP(false)
 	b.setStaticAssetURLs(&data, base)
 	return b.writePage(appendComponents(base, "offline.html"), data)
 }
@@ -479,12 +481,10 @@ func (b *staticSiteBuilder) writeAssets() error {
 // each page references, once all pages exist. It runs last so the sizes are
 // exact.
 func (b *staticSiteBuilder) writeSiteIndex() error {
-	images := make(map[string][]string)
+	pages := make(map[string]*buildDocument)
 	for _, mount := range b.mounts {
 		for _, document := range mount.documents {
-			if len(document.images) > 0 {
-				images[strings.Join(document.output, "/")] = document.images
-			}
+			pages[strings.Join(document.output, "/")] = document
 		}
 	}
 	var entries []siteEntry
@@ -508,7 +508,11 @@ func (b *staticSiteBuilder) writeSiteIndex() error {
 		case strings.HasPrefix(raw, "_mdfmt/"), raw == serviceWorkerName:
 			kind = "asset"
 		}
-		entries = append(entries, siteEntry{URL: siteRoute(strings.Split(raw, "/"), false), Size: info.Size(), Kind: kind, Images: images[raw]})
+		item := siteEntry{URL: siteRoute(strings.Split(raw, "/"), false), Size: info.Size(), Kind: kind}
+		if page := pages[raw]; page != nil {
+			item.Images, item.Mermaid = page.images, page.mermaid
+		}
+		entries = append(entries, item)
 		return nil
 	})
 	if err != nil {
@@ -522,7 +526,7 @@ func (b *staticSiteBuilder) writeCollectionHub() error {
 	projects := b.projectEntries(base, nil)
 	data := pageData{
 		Title: "Projects", Directory: "Projects", Breadcrumbs: []breadcrumb{{Name: "Projects"}},
-		Directories: projects, Projects: projects, ShowTitle: true, StaticCSP: staticBuildCSP(),
+		Directories: projects, Projects: projects, ShowTitle: true, StaticCSP: staticBuildCSP(false),
 	}
 	b.setStaticAssetURLs(&data, base)
 	return b.writePage([]string{"index.html"}, data)
@@ -538,7 +542,7 @@ func (b *staticSiteBuilder) writeDirectory(directory *buildDirectory) error {
 		Title: directoryDisplayName(directory), Directory: directoryDisplayName(directory),
 		Breadcrumbs: b.buildBreadcrumbs(directory.mount, directory.rel, nil, base),
 		Parent:      b.buildParentEntry(directory, base), Directories: directories, Files: files,
-		Projects: b.projectEntries(base, directory.mount), ShowTitle: true, StaticCSP: staticBuildCSP(),
+		Projects: b.projectEntries(base, directory.mount), ShowTitle: true, StaticCSP: staticBuildCSP(false),
 	}
 	b.setStaticAssetURLs(&data, base)
 	return b.writePage(appendComponents(base, "index.html"), data)
@@ -562,8 +566,9 @@ func (b *staticSiteBuilder) writeDocument(document *buildDocument, landing bool)
 		Parent:      b.buildParentEntry(document.directory, base), Directories: directories, Files: files,
 		Body: rendered.Body, TOC: rendered.TOC, TopURL: template.URL(relativeURL(base, document.output, false)),
 		IsDocument: true, ShowTitle: !rendered.HasH1, Projects: b.projectEntries(base, document.mount),
-		StaticCSP: staticBuildCSP(),
+		StaticCSP: staticBuildCSP(rendered.HasMermaid), HasMermaid: rendered.HasMermaid,
 	}
+	document.mermaid = rendered.HasMermaid
 	if landing {
 		data.TopURL = template.URL(staticDirectoryURL(base, base))
 	}
@@ -779,6 +784,7 @@ func (b *staticSiteBuilder) setStaticAssetURLs(data *pageData, base []string) {
 	}
 	data.StylesheetURL = asset("style.css")
 	data.ScriptURL = asset("app.js")
+	data.MermaidURL = asset("mermaid.js")
 	data.FaviconSVGURL = asset("favicon.svg")
 	data.FaviconICOURL = asset("favicon.ico")
 	data.Favicon16URL = asset("favicon-16.png")
@@ -801,8 +807,8 @@ func (b *staticSiteBuilder) writePage(route []string, data pageData) error {
 	return writeBuildFile(filepath.Join(append([]string{b.siteRoot}, route...)...), output.Bytes())
 }
 
-func staticBuildCSP() string {
-	return contentSecurityPolicy("'self'", "'self'", "'self' data:", false)
+func staticBuildCSP(inlineStyles bool) string {
+	return contentSecurityPolicy(styleSources(inlineStyles), "'self'", "'self' data:", false)
 }
 
 func directoryDisplayName(directory *buildDirectory) string {

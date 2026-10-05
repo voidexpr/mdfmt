@@ -457,3 +457,41 @@ func setBuildTemp(t *testing.T) {
 	t.Helper()
 	t.Setenv("TMPDIR", t.TempDir())
 }
+
+func TestBuildMermaidDiagramPages(t *testing.T) {
+	source := t.TempDir()
+	writeTestFile(t, source, "diagram.md", "# Flow\n\n```mermaid\nflowchart LR\n    A --> B\n```\n")
+	writeTestFile(t, source, "plain.md", "Just text.\n")
+	target := filepath.Join(t.TempDir(), "site")
+	if _, err := buildStaticSite(buildConfig{source: source, output: target, pathToken: pathTokenNone}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if mustRead(t, filepath.Join(target, "_mdfmt", "mermaid.js")) != string(mermaidAsset) {
+		t.Error("built mermaid.js differs from the embedded bundle")
+	}
+	diagram := mustRead(t, filepath.Join(target, "diagram.html"))
+	for _, want := range []string{
+		`<pre class="mermaid">`,
+		`<script src="_mdfmt/mermaid.js" defer></script>`,
+		`style-src &#39;self&#39; &#39;unsafe-inline&#39;;`,
+	} {
+		if !strings.Contains(diagram, want) {
+			t.Errorf("diagram page lacks %q:\n%s", want, diagram)
+		}
+	}
+	plain := mustRead(t, filepath.Join(target, "plain.html"))
+	if strings.Contains(plain, "mermaid") || !strings.Contains(plain, `style-src &#39;self&#39;;`) {
+		t.Errorf("plain page references Mermaid or relaxed its policy:\n%s", plain)
+	}
+	var index siteIndex
+	if err := json.Unmarshal([]byte(mustRead(t, filepath.Join(target, "_mdfmt", "site.json"))), &index); err != nil {
+		t.Fatal(err)
+	}
+	flags := map[string]bool{}
+	for _, entry := range index.Entries {
+		flags[entry.URL] = entry.Mermaid
+	}
+	if !flags["diagram.html"] || flags["plain.html"] {
+		t.Errorf("site index mermaid flags = %v", flags)
+	}
+}

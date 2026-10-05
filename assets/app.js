@@ -17,6 +17,7 @@
     }
   };
 
+  const darkScheme = matchMedia("(prefers-color-scheme: dark)");
   const applyTheme = (mode) => {
     if (mode === "system") root.removeAttribute("data-theme");
     else root.dataset.theme = mode;
@@ -25,7 +26,10 @@
       button.title = themeLabels[mode];
       button.setAttribute("aria-label", themeLabels[mode]);
     }
+    // Lets content that renders in theme colours, such as diagrams, follow.
+    dispatchEvent(new Event("mdfmt:theme"));
   };
+  darkScheme.addEventListener("change", () => applyTheme(savedTheme()));
 
   // Runs before the body is parsed so the page never paints in the wrong theme.
   applyTheme(savedTheme());
@@ -140,6 +144,7 @@
     }
   };
   const cacheURL = (route) => new URL(mdfmtCache.key(new URL(route, siteRoot)));
+  const assetURL = (name) => new URL(name, new URL(assetDir, siteRoot));
 
   // A home-screen app launches at the manifest's start URL, the root page,
   // with a resume marker. Redirecting here, before the body is parsed, aborts
@@ -163,6 +168,48 @@
   }
 
   const init = () => {
+    // Mermaid diagrams render from their source blocks once the library has
+    // loaded, which only pages with diagrams do. The source stays in the
+    // document so a theme change can render again.
+    const diagramSources = Array.from(document.querySelectorAll("pre.mermaid"));
+    let diagramCount = 0;
+    let renderedDark = null;
+    const renderDiagrams = async () => {
+      if (!diagramSources.length || !window.mermaid) return;
+      const dark = root.dataset.theme === "dark" || (!root.dataset.theme && darkScheme.matches);
+      if (dark === renderedDark) return;
+      renderedDark = dark;
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        suppressErrorRendering: true,
+        theme: dark ? "dark" : "default",
+        fontFamily: getComputedStyle(document.body).fontFamily,
+      });
+      for (const source of diagramSources) {
+        let diagram = source.nextElementSibling;
+        if (!diagram?.classList.contains("diagram")) {
+          diagram = document.createElement("div");
+          diagram.className = "diagram";
+          source.after(diagram);
+        }
+        diagramCount += 1;
+        let failed = false;
+        try {
+          const { svg } = await mermaid.render(`mdfmt-diagram-${diagramCount}`, source.textContent);
+          diagram.innerHTML = svg;
+        } catch (error) {
+          // The source stays readable with the parser's message beneath it.
+          diagram.textContent = String(error?.message || error);
+          failed = true;
+        }
+        diagram.classList.toggle("diagram-error", failed);
+        source.hidden = !failed;
+      }
+    };
+    renderDiagrams();
+    addEventListener("mdfmt:theme", renderDiagrams);
+
     // The toggle buttons exist now; label them for the active mode.
     applyTheme(savedTheme());
     for (const button of document.querySelectorAll("[data-theme-toggle]")) {
@@ -343,18 +390,20 @@
       const folderTargets = (index) => {
         const prefix = siteRoute(cacheURL(new URL("./", location.href).href));
         const sizes = new Map(index.entries.map((entry) => [siteRoute(cacheURL(entry.url)), entry.size]));
+        const mermaidRoute = siteRoute(cacheURL(assetURL("mermaid.js").href));
         const targets = new Set();
         for (const entry of index.entries) {
           const route = siteRoute(cacheURL(entry.url));
           if (entry.kind !== "page" || !route.startsWith(prefix)) continue;
           targets.add(route);
           for (const image of entry.images || []) targets.add(siteRoute(cacheURL(image)));
+          if (entry.mermaid) targets.add(mermaidRoute);
         }
         const routes = Array.from(targets);
         return { routes, total: routes.reduce((sum, route) => sum + (sizes.get(route) || 0), 0) };
       };
       (async () => {
-        const index = await fetch(new URL("site.json", new URL(assetDir, siteRoot)))
+        const index = await fetch(assetURL("site.json"))
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null);
         if (!index) return; // without an index the button stays hidden

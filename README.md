@@ -11,6 +11,7 @@ without adjacent runtime assets.
 
 * a file explorer for markdown files only
 * syntax highlighting of code blocks using Chroma
+* Mermaid diagrams rendered from `mermaid` code blocks
 * better than text editor preview by providing navigation and table of content
 
 ## Screenshots
@@ -375,6 +376,30 @@ in CSS:
 go generate ./internal/mdhighlight
 git diff -- assets/syntax.css
 ```
+
+## Diagrams
+
+A fenced code block labelled `mermaid` renders as a diagram in the browser
+with a vendored copy of the Mermaid library, so no network access is
+needed. Only pages that contain a diagram load the library, about 3.6 MB
+once and cached by the browser afterwards; `save` embeds it in files that
+need it. Diagrams follow the light or dark theme and render again when the
+theme toggle is used. A diagram that fails to parse shows its source with
+the parser's message beneath it.
+
+Mermaid writes inline styles into the SVG it draws, so pages with a diagram
+relax the Content-Security-Policy to `style-src 'self' 'unsafe-inline'`;
+every other page keeps the strict policy. Image, font and connection
+sources stay restricted, and Mermaid runs at its strict security level,
+which sanitises labels and disables click callbacks.
+
+A `build` lists pages with diagrams in the site index, so caching a folder
+for offline reading includes the library when needed. `serve` lists pages
+without that detail, so the library is cached when a diagram page is first
+visited.
+
+To upgrade the library, change `MERMAID_VERSION` and `MERMAID_SHA256` in the
+Makefile and run `make vendor-mermaid`.
 
 ## Development
 

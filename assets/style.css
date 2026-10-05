@@ -447,6 +447,12 @@ table {
 th, td { border: 1px solid var(--border); padding: .28rem .6rem; text-align: left; vertical-align: top; }
 th { background: var(--panel); color: var(--text-secondary); font-weight: 600; }
 
+/* A rendered Mermaid diagram replaces its source block; a diagram that
+   fails to parse keeps the source visible with the message beneath it. */
+.diagram { margin: .6rem 0 .9rem; overflow-x: auto; text-align: center; }
+.diagram svg { max-width: 100%; height: auto; }
+.diagram-error { color: var(--muted); font-family: var(--mono); font-size: 12px; text-align: left; white-space: pre-wrap; }
+
 .directory-table-wrap { overflow-x: auto; }
 
 .directory-table {

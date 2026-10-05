@@ -280,12 +280,8 @@ func TestStandaloneRenderingPrivacyAndFeatures(t *testing.T) {
 
 	style := textBetween(t, document, "<style>", "</style>")
 	script := textBetween(t, document, "<script>", "</script>")
-	cspMatch := regexp.MustCompile(`http-equiv="Content-Security-Policy" content="([^"]+)"`).FindStringSubmatch(document)
-	if len(cspMatch) != 2 {
-		t.Fatal("standalone output has no readable CSP meta value")
-	}
-	gotCSP := html.UnescapeString(cspMatch[1])
-	if wantCSP := standaloneCSP([]byte(style), []byte(script)); gotCSP != wantCSP {
+	gotCSP := standaloneCSPOf(t, document)
+	if wantCSP := standaloneCSP([]byte(style), []byte(script), nil); gotCSP != wantCSP {
 		t.Errorf("CSP does not authorize the exact inline assets:\ngot  %s\nwant %s", gotCSP, wantCSP)
 	}
 }
@@ -357,4 +353,43 @@ func textBetween(t *testing.T, document, start, end string) string {
 		t.Fatalf("document does not contain %q after %q", end, start)
 	}
 	return document[startIndex : startIndex+endIndex]
+}
+
+// standaloneCSPOf reads the policy from the output's meta tag.
+func standaloneCSPOf(t *testing.T, document string) string {
+	t.Helper()
+	match := regexp.MustCompile(`http-equiv="Content-Security-Policy" content="([^"]+)"`).FindStringSubmatch(document)
+	if len(match) != 2 {
+		t.Fatal("standalone output has no readable CSP meta value")
+	}
+	return html.UnescapeString(match[1])
+}
+
+func TestStandaloneEmbedsMermaidOnlyWhenNeeded(t *testing.T) {
+	source := "```mermaid\nflowchart LR\n    A --> B\n```\n"
+	diagramSource := writeTestFile(t, t.TempDir(), "diagram.md", source)
+	info, err := os.Stat(diagramSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := renderStandalone([]byte(source), "diagram.md", info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := string(output)
+	if !strings.Contains(document, string(mermaidAsset[:200])) {
+		t.Error("standalone output with a diagram does not embed the Mermaid bundle")
+	}
+	csp := standaloneCSPOf(t, document)
+	if !strings.Contains(csp, "style-src 'unsafe-inline';") || !strings.Contains(csp, sha256Source(mermaidAsset)) || strings.Count(csp, "sha256-") != 2 {
+		t.Errorf("standalone CSP with a diagram is wrong: %s", csp)
+	}
+
+	output, err = renderStandalone([]byte("Just text.\n"), "plain.md", info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(output), string(mermaidAsset[:200])) {
+		t.Error("standalone output without a diagram embeds the Mermaid bundle")
+	}
 }

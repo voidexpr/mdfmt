@@ -10,6 +10,7 @@
   <title>{{.Title}} · mdfmt</title>
   <style>{{.Stylesheet}}</style>
   <script>{{.Script}}</script>
+  {{with .Mermaid}}<script>{{.}}</script>{{end}}
 </head>
 <body>
   <div class="layout no-nav">

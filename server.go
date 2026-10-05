@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +27,7 @@ import (
 	"github.com/yuin/goldmark/text"
 
 	"github.com/voidexpr/mdfmt/internal/mdhighlight"
+	"github.com/voidexpr/mdfmt/internal/mdmermaid"
 )
 
 const assetPrefix = "/.mdfmt/"
@@ -42,10 +45,44 @@ var embeddedFiles embed.FS
 // The templates and assets are embedded at build time, so both commands share a
 // single parsed template set and one copy of each asset.
 var (
-	pageTemplates       = template.Must(template.New("mdfmt").ParseFS(embeddedFiles, "templates/*.html"))
-	stylesheetAsset     = joinAssets("assets/style.css", "assets/syntax.css")
-	scriptAsset         = joinAssets("assets/cache.js", "assets/app.js")
-	serviceWorkerAsset  = joinAssets("assets/cache.js", "assets/sw.js")
+	pageTemplates      = template.Must(template.New("mdfmt").ParseFS(embeddedFiles, "templates/*.html"))
+	stylesheetAsset    = joinAssets("assets/style.css", "assets/syntax.css")
+	scriptAsset        = joinAssets("assets/cache.js", "assets/app.js")
+	serviceWorkerAsset = joinAssets("assets/cache.js", "assets/sw.js")
+	mermaidAsset       = mustReadAsset("assets/mermaid.min.js")
+	serviceWorker      = newServedAsset(serviceWorkerAsset, "text/javascript; charset=utf-8")
+)
+
+// servedAsset is an embedded file with its content digest, computed once: it
+// is the entity tag that makes revalidation cheap and the cache-busting
+// version of its URL.
+type servedAsset struct {
+	content     []byte
+	contentType string
+	version     string
+}
+
+func newServedAsset(content []byte, contentType string) servedAsset {
+	digest := sha256.Sum256(content)
+	return servedAsset{content: content, contentType: contentType, version: hex.EncodeToString(digest[:16])}
+}
+
+// staticAssets are served beneath the asset prefix by name. Keep in step
+// with writeAssets in build.go and the shell list in sw.js.
+var staticAssets = map[string]servedAsset{
+	"style.css":            newServedAsset(stylesheetAsset, "text/css; charset=utf-8"),
+	"app.js":               newServedAsset(scriptAsset, "text/javascript; charset=utf-8"),
+	"mermaid.js":           newServedAsset(mermaidAsset, "text/javascript; charset=utf-8"),
+	"favicon.svg":          newServedAsset(faviconSVGAsset, "image/svg+xml"),
+	"favicon.ico":          newServedAsset(faviconICOAsset, "image/x-icon"),
+	"favicon-16.png":       newServedAsset(favicon16Asset, "image/png"),
+	"favicon-32.png":       newServedAsset(favicon32Asset, "image/png"),
+	"favicon-48.png":       newServedAsset(favicon48Asset, "image/png"),
+	"apple-touch-icon.png": newServedAsset(appleTouchIconAsset, "image/png"),
+	"manifest.webmanifest": newServedAsset(servedManifestAsset, "application/manifest+json"),
+}
+
+var (
 	faviconSVGAsset     = mustReadAsset("assets/favicon.svg")
 	faviconICOAsset     = mustReadAsset("assets/favicon.ico")
 	favicon16Asset      = mustReadAsset("assets/favicon-16.png")
@@ -135,6 +172,10 @@ type pageData struct {
 	Projects      []navEntry
 	StaticCSP     string
 	Offline       bool // the offline fallback page
+	// A document with Mermaid diagrams loads the library and allows the
+	// inline styles it writes.
+	HasMermaid bool
+	MermaidURL template.URL
 }
 
 type breadcrumb struct {
@@ -246,7 +287,7 @@ func (s *markdownServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == serviceWorkerPath {
-		writeAsset(w, r, serviceWorkerAsset, "text/javascript; charset=utf-8")
+		writeAsset(w, r, serviceWorker)
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, assetPrefix) {
@@ -339,14 +380,27 @@ func (s *markdownServer) stripPathToken(w http.ResponseWriter, r *http.Request) 
 }
 
 func setSecurityHeaders(header http.Header, editing bool) {
+	header.Set("Content-Security-Policy", servePolicy(editing, false))
+	header.Set("X-Content-Type-Options", "nosniff")
+	header.Set("Referrer-Policy", "no-referrer")
+	header.Set("X-Frame-Options", "DENY")
+}
+
+func servePolicy(editing, inlineStyles bool) string {
 	formAction := "'none'"
 	if editing {
 		formAction = "'self'"
 	}
-	header.Set("Content-Security-Policy", contentSecurityPolicyWithForm("'self'", "'self'", "'self' data:", true, formAction))
-	header.Set("X-Content-Type-Options", "nosniff")
-	header.Set("Referrer-Policy", "no-referrer")
-	header.Set("X-Frame-Options", "DENY")
+	return contentSecurityPolicyWithForm(styleSources(inlineStyles), "'self'", "'self' data:", true, formAction)
+}
+
+// styleSources allows inline styles only where Mermaid draws: its SVG carries
+// style attributes that no hash or nonce can cover.
+func styleSources(inlineStyles bool) string {
+	if inlineStyles {
+		return "'self' 'unsafe-inline'"
+	}
+	return "'self'"
 }
 
 // contentSecurityPolicy states mdfmt's policy once for both delivery paths. Set
@@ -374,52 +428,36 @@ func contentSecurityPolicyWithForm(styleSrc, scriptSrc, imgSrc string, frameAnce
 }
 
 func (s *markdownServer) serveAsset(w http.ResponseWriter, r *http.Request) {
-	var (
-		content     []byte
-		contentType string
-	)
-	switch r.URL.Path {
-	case assetPrefix + "style.css":
-		content, contentType = stylesheetAsset, "text/css; charset=utf-8"
-	case assetPrefix + "app.js":
-		content, contentType = scriptAsset, "text/javascript; charset=utf-8"
-	case assetPrefix + "favicon.svg":
-		content, contentType = faviconSVGAsset, "image/svg+xml"
-	case assetPrefix + "favicon.ico":
-		content, contentType = faviconICOAsset, "image/x-icon"
-	case assetPrefix + "favicon-16.png":
-		content, contentType = favicon16Asset, "image/png"
-	case assetPrefix + "favicon-32.png":
-		content, contentType = favicon32Asset, "image/png"
-	case assetPrefix + "favicon-48.png":
-		content, contentType = favicon48Asset, "image/png"
-	case assetPrefix + "apple-touch-icon.png":
-		content, contentType = appleTouchIconAsset, "image/png"
-	case assetPrefix + "manifest.webmanifest":
-		content, contentType = servedManifestAsset, "application/manifest+json"
-	case assetPrefix + "site.json":
-		content, contentType = s.siteIndex(), "application/json"
-	case assetPrefix + "offline.html":
+	name := strings.TrimPrefix(r.URL.Path, assetPrefix)
+	if asset, ok := staticAssets[name]; ok {
+		writeAsset(w, r, asset)
+		return
+	}
+	switch name {
+	case "site.json":
+		writeAsset(w, r, servedAsset{content: s.siteIndex(), contentType: "application/json"})
+	case "offline.html":
 		page, err := s.offlinePage()
 		if err != nil {
 			s.logger.Printf("offline page: %v", err)
 			http.Error(w, "offline page unavailable", http.StatusInternalServerError)
 			return
 		}
-		content, contentType = page, "text/html; charset=utf-8"
+		writeAsset(w, r, servedAsset{content: page, contentType: "text/html; charset=utf-8"})
 	default:
 		http.NotFound(w, r)
-		return
 	}
-	writeAsset(w, r, content, contentType)
 }
 
-func writeAsset(w http.ResponseWriter, r *http.Request, content []byte, contentType string) {
-	w.Header().Set("Content-Type", contentType)
+// writeAsset answers a revalidation with 304 when the asset has an entity
+// tag, so the browser downloads the Mermaid library once.
+func writeAsset(w http.ResponseWriter, r *http.Request, asset servedAsset) {
+	w.Header().Set("Content-Type", asset.contentType)
 	w.Header().Set("Cache-Control", "no-cache")
-	if r.Method == http.MethodGet {
-		_, _ = w.Write(content)
+	if asset.version != "" {
+		w.Header().Set("ETag", `"`+asset.version+`"`)
 	}
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(asset.content))
 }
 
 // siteEntry is one cacheable route of the site, relative to the site root.
@@ -428,6 +466,8 @@ type siteEntry struct {
 	Size   int64    `json:"size"`
 	Kind   string   `json:"kind"` // page, image, or asset
 	Images []string `json:"images,omitempty"`
+	// Mermaid marks pages that need the Mermaid asset to render offline.
+	Mermaid bool `json:"mermaid,omitempty"`
 }
 
 type siteIndex struct {
@@ -687,6 +727,7 @@ func (s *markdownServer) serveMarkdownPage(w http.ResponseWriter, r *http.Reques
 		TopURL:      template.URL(s.pageURL(directoryComponents, components, false)),
 		IsDocument:  true,
 		ShowTitle:   !rendered.HasH1,
+		HasMermaid:  rendered.HasMermaid,
 		CanEdit:     s.editor != nil,
 		Edit:        s.editAction(components, directoryComponents, components, false),
 		RawURL:      template.URL(rawURL),
@@ -732,6 +773,7 @@ func (s *markdownServer) setPageAssetURLs(data *pageData, baseDirectory []string
 	}
 	data.StylesheetURL = template.URL(string(assetURL("style.css")) + "?v=10")
 	data.ScriptURL = template.URL(string(assetURL("app.js")) + "?v=9")
+	data.MermaidURL = template.URL(string(assetURL("mermaid.js")) + "?v=" + staticAssets["mermaid.js"].version)
 	data.FaviconSVGURL = assetURL("favicon.svg")
 	data.FaviconICOURL = assetURL("favicon.ico")
 	data.Favicon16URL = assetURL("favicon-16.png")
@@ -775,6 +817,7 @@ func (s *markdownServer) writePage(w http.ResponseWriter, r *http.Request, data 
 		return &routeError{status: http.StatusInternalServerError, err: fmt.Errorf("execute template: %w", err)}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", servePolicy(s.editor != nil, data.HasMermaid))
 	if r.Method == http.MethodGet {
 		_, _ = w.Write(output.Bytes())
 	}
@@ -786,6 +829,7 @@ func newGoldmark() goldmark.Markdown {
 		goldmark.WithExtensions(
 			extension.GFM,
 			mdhighlight.Extension(),
+			mdmermaid.Extension(),
 			safeRawHTMLExtension{},
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
@@ -793,10 +837,11 @@ func newGoldmark() goldmark.Markdown {
 }
 
 type renderedDocument struct {
-	Title string
-	Body  template.HTML
-	TOC   []*tocItem
-	HasH1 bool
+	Title      string
+	Body       template.HTML
+	TOC        []*tocItem
+	HasH1      bool
+	HasMermaid bool
 }
 
 func renderMarkdownDocument(markdown goldmark.Markdown, source []byte, filename string) (renderedDocument, error) {
@@ -857,6 +902,9 @@ func renderMarkdownDocumentWithDestinationRewriter(
 			case *ast.Image:
 				node.Destination = rewriter(node.Destination, true)
 			}
+		}
+		if entering && node.Kind() == mdmermaid.Kind {
+			rendered.HasMermaid = true
 		}
 		heading, ok := node.(*ast.Heading)
 		if !entering || !ok {

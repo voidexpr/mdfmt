@@ -149,6 +149,7 @@
   <title>{{.Title}} · mdfmt</title>
   <link rel="stylesheet" href="{{.StylesheetURL}}">
   <script src="{{.ScriptURL}}"></script>
+  {{if .HasMermaid}}<script src="{{.MermaidURL}}" defer></script>{{end}}
 </head>
 <body>
   <div class="layout">

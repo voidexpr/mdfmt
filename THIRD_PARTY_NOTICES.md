@@ -8,7 +8,12 @@ respective dependencies, not to `mdfmt` itself.
 - Chroma: Copyright (c) 2017 Alec Thomas
 - goldmark: Copyright (c) 2019 Yusuke Inuzuka
 - goldmark-highlighting: Copyright (c) 2019 Yusuke Inuzuka
+- Mermaid: Copyright (c) 2014 - 2022 Knut Sveidqvist
 - regexp2: Copyright (c) Doug Clark
+
+The vendored Mermaid bundle (`assets/mermaid.min.js`) carries its own
+bundled dependencies, among them d3 (ISC) and DOMPurify (Apache License 2.0
+or MPL 2.0); their notices are in the Mermaid repository.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

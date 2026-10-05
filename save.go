@@ -23,6 +23,7 @@ type standalonePageData struct {
 	pageData
 	Stylesheet template.CSS
 	Script     template.JS
+	Mermaid    template.JS // the diagram library, only when the document needs it
 	CSP        string
 }
 
@@ -176,6 +177,10 @@ func renderStandalone(source []byte, filename string, info fs.FileInfo) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("render markdown: %w", err)
 	}
+	var mermaid []byte
+	if rendered.HasMermaid {
+		mermaid = mermaidAsset
+	}
 	data := standalonePageData{
 		pageData: pageData{
 			Title:         rendered.Title,
@@ -190,10 +195,12 @@ func renderStandalone(source []byte, filename string, info fs.FileInfo) ([]byte,
 			TOC:           rendered.TOC,
 			IsDocument:    true,
 			ShowTitle:     !rendered.HasH1,
+			HasMermaid:    rendered.HasMermaid,
 		},
 		Stylesheet: template.CSS(stylesheetAsset),
 		Script:     template.JS(scriptAsset),
-		CSP:        standaloneCSP(stylesheetAsset, scriptAsset),
+		Mermaid:    template.JS(mermaid),
+		CSP:        standaloneCSP(stylesheetAsset, scriptAsset, mermaid),
 	}
 	var output bytes.Buffer
 	if err := pageTemplates.ExecuteTemplate(&output, "standalone.html", data); err != nil {
@@ -206,8 +213,18 @@ func embeddedAssetDataURL(contentType string, content []byte) template.URL {
 	return template.URL("data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(content))
 }
 
-func standaloneCSP(stylesheet, script []byte) string {
-	return contentSecurityPolicy(sha256Source(stylesheet), sha256Source(script), "'self' data:", false)
+// standaloneCSP authorizes the exact inline assets by hash. A document with
+// diagrams embeds the Mermaid bundle and needs inline styles instead, and
+// browsers ignore 'unsafe-inline' next to a hash, so the stylesheet hash is
+// dropped in that case.
+func standaloneCSP(stylesheet, script, mermaid []byte) string {
+	styleSrc := sha256Source(stylesheet)
+	scriptSrc := sha256Source(script)
+	if mermaid != nil {
+		styleSrc = "'unsafe-inline'"
+		scriptSrc += " " + sha256Source(mermaid)
+	}
+	return contentSecurityPolicy(styleSrc, scriptSrc, "'self' data:", false)
 }
 
 func sha256Source(content []byte) string {

@@ -1,4 +1,8 @@
-.PHONY: all build test test-race vet lint fmt generate-check vulncheck tidy-check install clean coverage ci screenshots
+.PHONY: all build test test-race vet lint fmt generate-check vulncheck tidy-check install clean coverage ci screenshots vendor-mermaid
+
+# The vendored Mermaid release.
+MERMAID_VERSION = 11.17.2
+MERMAID_SHA256 = 581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8
 
 all: ci
 
@@ -43,6 +47,10 @@ coverage:
 
 screenshots: build
 	sh docs/take-screenshots.sh
+
+vendor-mermaid:
+	curl -fsSL -o assets/mermaid.min.js https://cdn.jsdelivr.net/npm/mermaid@$(MERMAID_VERSION)/dist/mermaid.min.js
+	echo "$(MERMAID_SHA256)  assets/mermaid.min.js" | shasum -a 256 -c
 
 ci: build test-race vet lint generate-check tidy-check vulncheck
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
