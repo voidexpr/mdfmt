@@ -170,6 +170,7 @@ type pageData struct {
 	ManifestURL   template.URL
 	RootURL       template.URL // the site's root page, relative to this page
 	Projects      []navEntry
+	ProjectsHub   bool // the page listing the projects; the sidebar shows nothing else
 	StaticCSP     string
 	Offline       bool // the offline fallback page
 	// A document with Mermaid diagrams loads the library and allows the

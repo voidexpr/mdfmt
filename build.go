@@ -526,7 +526,7 @@ func (b *staticSiteBuilder) writeCollectionHub() error {
 	projects := b.projectEntries(base, nil)
 	data := pageData{
 		Title: "Projects", Directory: "Projects", Breadcrumbs: []breadcrumb{{Name: "Projects"}},
-		Directories: projects, Projects: projects, ShowTitle: true, StaticCSP: staticBuildCSP(false),
+		Directories: projects, Projects: projects, ProjectsHub: true, ShowTitle: true, StaticCSP: staticBuildCSP(false),
 	}
 	b.setStaticAssetURLs(&data, base)
 	return b.writePage([]string{"index.html"}, data)

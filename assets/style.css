@@ -139,6 +139,29 @@ html.nav-collapsed .left-sidebar .pane-head { justify-content: center; border-bo
   text-transform: uppercase;
 }
 
+/* Below the projects page the project list is collapsed behind its title,
+   so the sidebar stays focused on the current folder. */
+.section-toggle {
+  display: inline-flex;
+  gap: .3rem;
+  align-items: center;
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.section-toggle:hover,
+.section-toggle:focus-visible { color: var(--accent); }
+.section-toggle .icon { transition: transform .15s; }
+.section-toggle[aria-expanded="true"] .icon { transform: rotate(90deg); }
+html:not(.projects-open) [data-projects-list] { display: none; }
+
 .sort-control { display: inline-flex; flex: 0 0 auto; gap: 2px; }
 
 .sort-control button {

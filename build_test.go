@@ -163,7 +163,15 @@ func TestBuildTokenizedCollection(t *testing.T) {
 	if strings.Contains(hub, token) || !strings.Contains(hub, `href="a/index.html"`) || !strings.Contains(hub, `href="work/research/index.html"`) {
 		t.Errorf("collection hub has incorrect links or leaked token:\n%s", hub)
 	}
+	// The hub lists the projects as its content; its sidebar shows the
+	// expanded project list and nothing else.
+	if strings.Count(hub, `class="nav-entry directory`) != 2 || strings.Contains(hub, `data-projects-toggle`) || strings.Contains(hub, `data-file-list`) {
+		t.Errorf("collection hub sidebar should list each project once, expanded:\n%s", hub)
+	}
 	document := mustRead(t, filepath.Join(output, "work", "research", "notes.html"))
+	if !strings.Contains(document, `data-projects-toggle`) || !strings.Contains(document, `<nav class="project-navigation" id="project-navigation" data-projects-list>`) {
+		t.Errorf("document lacks the collapsible project section:\n%s", document)
+	}
 	for _, want := range []string{
 		`href="../../_mdfmt/style.css"`, `href="../../index.html"`, `href="../../a/index.html"`,
 		`>a/</span></a>`, `>work/research/</span></a>`,

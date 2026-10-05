@@ -90,6 +90,17 @@
   };
   applyNavCollapsed(navSetting.load() === "collapsed");
 
+  // Below the projects page the project list is collapsed unless opened; the
+  // choice is remembered like the sidebar's.
+  const projectsSetting = persistedSetting("mdfmt.projects", "mdfmt_projects");
+  const applyProjectsOpen = (open) => {
+    root.classList.toggle("projects-open", open);
+    for (const button of document.querySelectorAll("[data-projects-toggle]")) {
+      button.setAttribute("aria-expanded", String(open));
+    }
+  };
+  applyProjectsOpen(projectsSetting.load() === "open");
+
   // Reading positions live in one list of the most recently viewed documents.
   // The page announces its root page (the directory page in serve, index.html
   // in a build). A document is identified by its path relative to the root
@@ -230,6 +241,15 @@
         const collapsed = !root.classList.contains("nav-collapsed");
         applyNavCollapsed(collapsed);
         navSetting.save(collapsed ? "collapsed" : "expanded");
+      });
+    }
+
+    applyProjectsOpen(root.classList.contains("projects-open"));
+    for (const button of document.querySelectorAll("[data-projects-toggle]")) {
+      button.addEventListener("click", () => {
+        const open = !root.classList.contains("projects-open");
+        applyProjectsOpen(open);
+        projectsSetting.save(open ? "open" : "closed");
       });
     }
 

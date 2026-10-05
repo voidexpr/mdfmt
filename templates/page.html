@@ -21,6 +21,7 @@
 {{define "icon-file"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5l3.5 3.5v9.5a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-12.5a.5.5 0 0 1 .5-.5z"/><path d="M9 1.5V5h3.5"/></svg>{{end}}
 {{define "icon-back"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>{{end}}
 {{define "icon-toc"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>{{end}}
+{{define "icon-chevron"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>{{end}}
 {{define "icon-sidebar"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg>{{end}}
 {{define "icon-recent"}}<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>{{end}}
 {{define "icon-size"}}<svg class="icon" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 13.5v-3M8 13.5v-7M12.5 13.5V2.5"/></svg>{{end}}
@@ -160,17 +161,19 @@
         <button class="nav-toggle" type="button" data-nav-toggle aria-expanded="true" aria-label="Hide the sidebar" title="Hide the sidebar">{{template "icon-sidebar"}}</button>
       </div>
       {{if .Projects}}
-      <div class="sidebar-title">Projects</div>
-      <nav class="project-navigation">
+      <div class="sidebar-title">{{if .ProjectsHub}}<span>Projects</span>{{else}}<button class="section-toggle" type="button" data-projects-toggle aria-expanded="false" aria-controls="project-navigation"><span>Projects</span>{{template "icon-chevron"}}</button>{{end}}</div>
+      <nav class="project-navigation" id="project-navigation"{{if not .ProjectsHub}} data-projects-list{{end}}>
         {{range .Projects}}<a class="nav-entry directory{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="true"{{end}}>{{template "icon-folder"}}<span class="name">{{.Title}}/</span></a>{{end}}
       </nav>
       {{end}}
+      {{if not .ProjectsHub}}
       <div class="sidebar-title"><span>{{.Directory}}</span>{{if .Files}}{{template "sort-control"}}{{end}}</div>
       {{with .Parent}}<nav class="parent-navigation"><a class="nav-entry parent" href="{{.URL}}">{{template "icon-back"}}<span class="name">{{.Title}}</span></a></nav>{{end}}
       <nav data-file-list>
         {{range .Directories}}<a class="nav-entry directory" href="{{.URL}}">{{template "icon-folder"}}<span class="name">{{.Title}}/</span></a>{{end}}
         {{range .Files}}<a class="nav-entry file{{if .Active}} active{{end}}" href="{{.URL}}"{{if .Active}} aria-current="page"{{end}} title="{{.Name}}&#10;{{.Title}}&#10;{{.Modified}} · {{.Ago}} · {{.Size}}" data-name="{{.Name}}" data-modified="{{.SortModified}}" data-size="{{.SortSize}}">{{template "icon-file"}}<span class="entry-lines"><span class="name">{{.Name}}</span>{{if .HasTitle}}<span class="title">{{.Title}}</span>{{end}}<span class="detail"><span>{{.Modified}}</span><time class="age" datetime="{{.ModifiedFull}}" data-relative-time>{{.Ago}}</time><span class="size">{{.Size}}</span></span></span></a>{{end}}
       </nav>
+      {{end}}
     </aside>
 
 {{template "main" .}}

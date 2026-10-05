@@ -308,7 +308,10 @@ or largest first; the choice is remembered in the browser, separately from
 the directory listing's own sort. Hovering an entry shows its filename,
 title, modification date, age, and size. The button next
 to the logo collapses the sidebar to a narrow rail, leaving more room for the
-document; the choice is remembered in the browser too.
+document; the choice is remembered in the browser too. In a site built from
+several mounts, the projects page lists them, and every page below it has a
+Projects section in the sidebar that is collapsed until opened, remembered
+the same way, so the sidebar stays focused on the current folder.
 
 The toolbar has two additional buttons next to the theme toggle:
 
