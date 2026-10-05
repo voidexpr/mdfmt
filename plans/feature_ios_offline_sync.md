@@ -21,11 +21,12 @@ one reconcile pass that keeps the cache current.
 The web manifest cannot preload anything; there is no manifest member that
 lists URLs. All offline content goes through the service worker and Cache
 Storage, and on iOS a web app runs only in the foreground: Periodic
-Background Sync and Background Fetch are Chromium-only, and a push
-notification cannot make the worker fetch article bodies. "Automatic"
-therefore means "on every launch and page load while the app is open and
-online", which is enough: opening the app once brings the mirror up to
-date, and reading keeps it fresh.
+Background Sync and Background Fetch are Chromium-only. Web Push can wake
+the worker on iOS 16.4 and later, but it needs a push backend and must show
+a notification, so it is out of scope. "Automatic" therefore means "on
+every launch and page load while the app is open and online", which is
+enough: opening the app once brings the mirror up to date, and reading
+keeps it fresh.
 
 ## Design summary
 
@@ -75,9 +76,11 @@ Each `entries[]` item gains a `stamp` string, opaque to the client:
 
 - **`build`** uses a short prefix of the SHA-256 of the written file, for
   pages, images and assets alike. The index is written after every other
-  file, so hashing happens in the same walk that collects sizes. Assets are
-  content-versioned already through their `?v=` query; the stamp merely
-  unifies the rule.
+  file, so hashing happens in the same walk that collects sizes. Build
+  assets carry no `?v=` version today (only `serve` appends one), so the
+  stamp is also what lets the pass refresh a changed stylesheet or script;
+  the worker's network-first fetch already refreshes them on any online
+  load.
 - **`serve`** cannot hash rendered output without rendering every document
   on each index request. A document's stamp is its source modification
   time and size, the same pair the title cache uses to detect changes. A
@@ -88,9 +91,16 @@ Each `entries[]` item gains a `stamp` string, opaque to the client:
   page.
 - **Generation.** The existing `generated` field becomes meaningful for
   skipping work: `serve` sets it to the newest modification time seen in
-  the walk rather than the request time, so it changes only when the tree
-  does. A pass that finds `generated` equal to the value stored after the
-  last completed pass ends immediately.
+  the walk rather than the request time, and `build` sets it to a hash
+  over all entry stamps rather than the build time, so it changes only
+  when the site does and an unchanged rebuild short-circuits. A pass that
+  finds `generated` equal to the value stored after the last completed
+  pass ends immediately.
+- **Order.** Entries gain a `modified` time (RFC 3339): the source
+  modification time for documents in both modes, the newest child for
+  directory pages. Today both indexes are in name order (`build` walks the
+  output tree, `serve` sorts each listing by name), so the "newest first"
+  fetch order below needs this field.
 
 `serve` walks the tree on every index request today. With a request per
 page load the walk should be memoised for a few seconds, keyed on nothing
@@ -104,17 +114,22 @@ that avoids the scan when present.
 
 ## Stored stamps
 
-The stamp of a cached entry lives with the entry: the reconcile stores the
-response itself with an added `X-Mdfmt-Stamp` header rather than relying on
-the worker's put. This keeps one source of truth: an entry evicted by the
-device disappears together with its stamp, and a page cached by an ordinary
-visit has no stamp and is refreshed by the next pass, which then records
-one. No second store in `localStorage` or IndexedDB can drift from the
-cache.
+The stamp of a cached entry lives with the entry: a stored response
+carries an added `X-Mdfmt-Stamp` header. Adding a header means rebuilding
+the response (`new Response(body, { status, headers })`), which is done
+after the shared cacheability check in `cache.js`, since the rebuilt
+response no longer reports itself as same-origin. This keeps one source of
+truth: an entry evicted by the device disappears together with its stamp.
+No second store in `localStorage` or IndexedDB can drift from the cache.
 
 The worker keeps storing every successful network response on ordinary
 navigation, so a visited page is always fresh when online whether or not
-the reconcile has run.
+the reconcile has run. It records the stamp too: the index is itself cached
+network-first under the asset directory, so when the worker stores a page it
+looks the route up in that cached copy and stamps the entry. Without this
+every page visited online would look unstamped to the next pass and be
+fetched a second time. A visit before the index was ever cached stores an
+unstamped entry, which the next pass refreshes once.
 
 ## Subscriptions
 
@@ -130,13 +145,16 @@ page, but its meaning changes from an action to a switch:
 - **Subscribed and incomplete**, for example after an interrupted pass or an
   eviction: the button shows the count still missing and a tap resumes.
 
-The list is stored in `localStorage` under `mdfmt.offline.folders`, next to
-the recent-documents list, as root-relative routes. The root page's button
-subscribes the whole site with route `""`. A folder inside a subscribed
-ancestor shows as subscribed and cannot be unsubscribed on its own; the
-button's title says which ancestor covers it. Subscriptions are per site
-root like the cache; a rotated path token starts empty, as the README
-already advises for installed apps.
+The list is stored in `localStorage` under `mdfmt.offline-folders`, next
+to the recent-documents list and named like the other keys, as
+root-relative routes. The root page's button subscribes the whole site with
+route `""`. A folder inside a subscribed ancestor shows as subscribed and
+cannot be unsubscribed on its own; the button's title says which ancestor
+covers it. Like the recent-documents list, the subscriptions are stored per
+origin with root-relative routes, so they survive a rotated path token
+while the cache does not: the first online load after a rotation mirrors
+the subscribed folders again. This is the behaviour an installed app wants,
+and it is why the README still advises a stable token for the phone.
 
 There is no default subscription. Sizes are shown before the first tap, and
 a reader who wants the read-it-later behaviour taps the root button once.
@@ -146,12 +164,17 @@ The README recommends exactly that for the home-screen app.
 
 The pass runs in the page, not the worker, for the same reasons as the
 existing button: the Cache Storage API is available to windows, progress
-is trivial to show, and a page outlives the worker's idle timeout. It
-starts after `navigator.serviceWorker.ready` on every page load with a site
-root, when `navigator.onLine` is true, and never on the offline page. It
-is skipped without a fetch when a pass is already running in another tab,
-detected with a short-lived `localStorage` lock, and ends immediately when
-the index's `generated` value equals the stored one.
+is trivial to show, and a page outlives the worker's idle timeout. It does
+not need the worker at all and does not wait for it, exactly as the button
+today writes to the cache itself. It starts on every page load with a site
+root, when `navigator.onLine` is true, and never on the offline page;
+`navigator.onLine` can report true on a dead link, in which case the index
+fetch fails and the pass ends without work. It is skipped without a fetch
+when a pass is already running in another tab, detected with a short-lived
+`localStorage` lock, and ends immediately when the index's `generated`
+value equals the stored one. The index fetch doubles as the source of the
+button's count and size on directory pages, so a directory page still
+issues one index request, not two.
 
 Otherwise, with the index in hand:
 
@@ -162,12 +185,12 @@ Otherwise, with the index in hand:
    stamp) and, for cached routes outside every subscription, refresh only
    when the stamp differs. Cached page routes that the index does not list
    at all are deleted; this is how a document removed on the server leaves
-   the device. Assets under the asset directory and the offline page are
-   never deleted by the pass; the worker owns them.
+   the device. Cache keys with a query, the raw-source views, are ignored
+   as they are today, and assets under the asset directory and the offline
+   page are never deleted by the pass; the worker owns them.
 2. **Order.** Directory pages first, so offline navigation works as early
-   as possible, then documents newest first by the index order `build` and
-   `serve` already produce, then images. An interrupted pass leaves the
-   most useful subset.
+   as possible, then documents newest first by the `modified` field, then
+   images. An interrupted pass leaves the most useful subset.
 3. **Fetch.** Four workers drain the queue, as today. A response is stored
    only under the worker's own rule: status 200, not redirected, same
    origin. A failed fetch leaves the entry for the next pass. Each stored
@@ -218,9 +241,14 @@ which the directory pages already show.
 
 ## Files touched
 
-- `server.go`: `stamp` on `siteEntry`; directory stamps and the newest
-  modification time in `siteIndex`; short memoisation of the encoded index.
-- `build.go`: output hashes as stamps in `writeSiteIndex`.
+- `server.go`: `stamp` and `modified` on `siteEntry`; directory stamps and
+  the newest modification time in `siteIndex`; short memoisation of the
+  encoded index.
+- `build.go`: output hashes as stamps and a stamp-derived `generated` in
+  `writeSiteIndex`; document modification times.
+- `assets/cache.js`: the stamped put shared by the page and the worker.
+- `assets/sw.js`: stamping stored navigation responses from the cached
+  index.
 - `assets/app.js`: the subscription list; the reconcile pass replacing the
   one-off fetch loop of the folder button; the button states; the offline
   page grouping.
@@ -252,11 +280,16 @@ Go tests:
   with a stable path token;
 - `serve` stamps change on a source edit and on adding or removing a child
   of a directory, and `generated` is the newest modification time seen;
+- a build's `generated` is equal across two unchanged builds and differs
+  after any output change;
+- every entry carries a `modified` time;
 - the memoised index is refreshed after its window.
 
 Browser checks with playwright-cli against `serve` on `127.0.0.1`:
 
 - subscribe a folder, confirm every page below it is cached with a stamp;
+- visit a page online and confirm the worker stored it with a stamp, and
+  that the next pass does not fetch it again;
 - edit one file, reload any page, confirm only that page is refetched;
 - delete a file, reload, confirm its cache entry is gone and the offline
   page no longer lists it;
